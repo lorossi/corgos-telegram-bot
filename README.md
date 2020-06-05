@@ -18,7 +18,9 @@ Usage of the commands:
 It will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human.
 
 **Video example:**
+
 ![demo - i cannot center this image :()](https://media.giphy.com/media/STxn673gNkyXwQXr1w/giphy.gif)
+
 *(thanks to Reddit user u/GleamTheCube for his unwitting help. What a lovely corgi!)*
 
 ### Image sourcing
