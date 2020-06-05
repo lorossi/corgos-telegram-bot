@@ -1,0 +1,20 @@
+{
+    "Reddit": {
+        "client_id": "REDDIT-CLIENT-ID",
+        "client_secret": "REDDIT-CLIENT-SECRET",
+        "user_agent": "USER-AGENT",
+        "post_limit": 250,
+        "min_score": 5,
+        "golden_corgos_found": 0,
+        "golden_corgo_url": "GOLDEN-CORGO-URL"
+    },
+    "Telegram": {
+        "token": "TELEGRAM-BOT-TOKEN",
+        "admins": [
+            "ADMIN-TELEGRAM-ID"
+        ],
+        "corgos_sent": 0,
+        "time_format": "%Y/%m/%d %H:%M:%S",
+        "start_date": "START-DATE-(must time_format compliant)"
+    }
+}
