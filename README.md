@@ -1,5 +1,6 @@
 # Corgos Telgram BOT
 ## Free delivery of cute corgis images
+`Corgo: just a corgi but man, internet slang is weird` ~ *Oxford dictionary, probably*
 
 ### Background
 I like corgis. Like, a lot. Sadly I cannot adopt one right now on in the near future, so I made the most reasonable thing a person could do:
@@ -10,36 +11,46 @@ The bot is coded in Python by using the [python-telegram-bot](https://github.com
 ### Usage
 The bot it's pretty straightforward to use. Just start a conversation with \@corgos_bot or navigate to t.me/corgos_bot to start using it.
 Usage of the commands:
-* */start* will give you a brief description of the bot.
+* */start* will give you a brief description of what the bot can do.
 * */corgo* will send you a corgi picture.
 * */goldencorgo* will tell you the tale of the Golden Corgo.
 * */stats* will tell you some (mostly useless) information about the bot.
 
-It will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human.
+Furthermore, there are 3 more *hidden* commands (as they are not listed):
+* */ping* will reply **PONG**, I coded this to make sure that the bot was currently running and any user can use this.
+* */stop* will stop the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
+* */reset* will reload the script. This command can only be used by users whose id is in the *admins* settings in the config file.
+
+The bot will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human.
 
 **Video example:**
 
-![demo - i cannot center this image :()](https://media.giphy.com/media/STxn673gNkyXwQXr1w/giphy.gif)
+![demo - i cannot center this image :( )](https://media.giphy.com/media/STxn673gNkyXwQXr1w/giphy.gif)
 
 *(thanks to Reddit user u/GleamTheCube for his unwitting help. What a lovely corgi!)*
 
 ### Image sourcing
-All the images are sourced from Reddit, namely from */r/corgi* and */r/babycorgis* subreddits. I do not own nor I choose any of this pictures. <br>
-In order to be chosen, a post must have a minimum score, fixed in the settings file. I trust each moderator and their ability to remove any unsuitable image. <br>
-The subreddits are scraped three times a week, at 2.20 AM (GMT), and every time about 250 photos are loaded (this might not be a fixed value).
+All the images are sourced from Reddit, namely from */r/corgi* and */r/babycorgis* subreddits. I do not own nor I choose any of this pictures.
+
+In order to be chosen, a post must have a minimum score, fixed in the settings file. I trust each moderator and their ability to remove any unsuitable image.
+
+The subreddits are scraped three times a week, at 2.20 AM (GMT), and every time 300 (as set in *settings.json* file) *weekly hottest* posts are loaded.
+Every post is then analyzed and any non pictures posts or posts with a low score are discarded.  Lastly, the list of URL is randomized.
+
+Every time a picture is sent the list is rotated, so it's impossible that the same picture is sent twice (or more!) in a row.
 
 ### Next features
 As I write this readme, the bot has been going for almost 9 month and about 20000 pictures have been sent.
 I feel that, during the multiple iterations of this script (none of those are on GitHub, I'm sorry) I implemented every aspect I liked (and needed).
-However, I plan to add one command to get photos of my corgi as soon as I manage to adopt one. Did I already mention that I love corgis?
 
+However, I plan to add one command to get photos of my corgi as soon as I manage to adopt one. Did I already mention that I love corgis?
 
 ## Installation
 I provided a requirements.txt file in order to automatically install all the needed requirements. <br>
 If you want to run this bot yourself on your machine, you have to follow a few steps:
 1. Register to Reddit Api
 2. Create a Telegram bot using \@botfather on Telegram and set the command list as it's provided in the code (line 145)
-3. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret)
+3. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
 4. Fill the *settings.json* with the data you have gathered so far (Reddit access details, Telegram token)
 5. Install all the requirements via the command `pip3 install -r requirements.txt`
 6. Finally, run the script with `python3 corgos_bot.py`. The script will log everything in a file (named *logging.log*) in the same folder.

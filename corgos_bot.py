@@ -317,18 +317,19 @@ def corgo(update, context):
     bot_username = t.updater.bot.get_me()["username"]
     caption = f"@{bot_username}"
 
-    # Not the best way of catching errors
-    # I might find a better way of checking urls but I fear it might
+    # not the best way of catching errors
+    # i might find a better way of checking urls but I fear it might
     #   be too slow. There's no real way to know if an image is still available
-    #   unless trying to download it. So what this loop does is trying again
-    #   until it works
-    while True:
-        try:
-            url = r.getUrl()
-            context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
-            break
-        except:
-            pass
+    #   unless trying to send it. It shouldn't happen often, but the method I
+    #   used previoulsy managed to crash both the script and the RaspberryPi
+    try:
+        url = r.getUrl()
+        context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
+    except Exception as e:
+        logging.error("Error while sending photo. Url %s Error %s", url, str(e))
+        raise Exception(f"Url {url} is not valid")
+        # at this point, an exception is raised and the error function is
+        #   called. The user gets notified and prompted to try again.
 
     t.updateCorgosSent()
     message = "_Press /corgo for another corgo!_"
@@ -424,8 +425,13 @@ def text_message(update, context):
 
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
+    # we want to generate some gibberish answer to every message
     # the dog noise list was sourced on Wikipedia. Yes, Wikipedia.
-    message = f"_{random.choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}!_"
+    bark = random.choice(['ARF ', 'WOFF ', 'BORK ', 'RUFF '])
+    bark *= random.randint(1, 2) # get some repetition
+    bark = bark.rstrip() # remove the last space if present
+    mark = random.choice(['!', '?', '!?', '?!'])
+    message = f"_{bark}{mark}_"
     context.bot.send_message(chat_id=chat_id, text=message,
                              reply_to_message_id=message_id,
                              parse_mode=ParseMode.MARKDOWN)
@@ -481,7 +487,7 @@ def error(update, context):
 # we log everything into the "corgos_bot.log" file
 logging.basicConfig(filename="corgos_bot.log", level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s',
-                    filemode="w+")
+                    filemode="a")
 
 # Reddit section
 r = Reddit()
