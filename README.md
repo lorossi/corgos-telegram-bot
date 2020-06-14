@@ -21,7 +21,7 @@ Furthermore, there are 3 more *hidden* commands (as they are not listed):
 * */stop* will stop the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
 * */reset* will reload the script. This command can only be used by users whose id is in the *admins* settings in the config file.
 
-The bot will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human.
+The bot will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human. Also it hates swearwords. Watch your languge.
 
 **Video example:**
 

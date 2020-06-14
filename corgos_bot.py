@@ -104,7 +104,7 @@ class Reddit:
                 content_type = urlopen(s.url).info()["content-type"]
             except:
                 # if it fails, it's beacuse the image has been removed
-                logging.error("Cannot open url %s", s.url)
+                logging.error(f"Cannot open url {s.url}")
                 continue
 
             # if it's not an image, we skip the current url
@@ -162,7 +162,6 @@ class Telegram:
         self.token = self.settings["token"]
         self.admins = self.settings["admins"]
         self.corgos_sent = self.settings["corgos_sent"]
-        self.time_format = self.settings["time_format"]
         self.start_date = self.settings["start_date"]
 
     # Saves settings into file
@@ -189,7 +188,6 @@ class Telegram:
             "admins": self.admins,
             "corgos_sent": self.corgos_sent,
             "start_date": self.start_date,
-            "time_format": self.time_format
         }
 
     # Starts the bot
@@ -318,7 +316,7 @@ def corgo(update, context):
     caption = f"@{bot_username}"
 
     # not the best way of catching errors
-    # i might find a better way of checking urls but I fear it might
+    # I might find a better way of checking urls but I fear it might
     #   be too slow. There's no real way to know if an image is still available
     #   unless trying to send it. It shouldn't happen often, but the method I
     #   used previoulsy managed to crash both the script and the RaspberryPi
@@ -326,7 +324,7 @@ def corgo(update, context):
         url = r.getUrl()
         context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
     except Exception as e:
-        logging.error("Error while sending photo. Url %s Error %s", url, str(e))
+        logging.error(f"Error while sending photo. Url {url} Error {e}")
         raise Exception(f"Url {url} is not valid")
         # at this point, an exception is raised and the error function is
         #   called. The user gets notified and prompted to try again.
@@ -378,7 +376,7 @@ def stats(update, context):
     golden_corgos_found = r.showStatus()["golden_corgos_found"]
 
     # bot started date
-    d1 = datetime.strptime(status["start_date"], status["time_format"])
+    d1 = datetime.fromisoformat(status["start_date"])
     # todays date
     d2 = datetime.now()
     days_between = (d2 - d1).days + 1
@@ -425,12 +423,35 @@ def text_message(update, context):
 
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
+    barks = ['ARF ', 'WOFF ', 'BORK ', 'RUFF ']
+    swearwords = ['HECK', 'GOSH', 'DARN']
+    marks = ['!', '?', '!?', '?!']
+    
+    # if the message is a "swear word", we want to notify the user that we
+    # don't tolerate it here
+    for s in swearwords:
+        if s in update.message.text.upper():
+            message = f"_No H*CKING BAD LANGUAGE HERE!_"
+            context.bot.send_message(chat_id=chat_id, text=message,
+                                    reply_to_message_id=message_id,
+                                    parse_mode=ParseMode.MARKDOWN)
+            return
+
+    # if the message contains a "bark", we want to reply accordingly
+    for b in barks:
+        if b.strip() in update.message.text.upper():
+            message = f"_{b.strip()}!_"
+            context.bot.send_message(chat_id=chat_id, text=message,
+                                    reply_to_message_id=message_id,
+                                    parse_mode=ParseMode.MARKDOWN)
+            return
+
     # we want to generate some gibberish answer to every message
     # the dog noise list was sourced on Wikipedia. Yes, Wikipedia.
-    bark = random.choice(['ARF ', 'WOFF ', 'BORK ', 'RUFF '])
+    bark = random.choice(barks)
     bark *= random.randint(1, 2) # get some repetition
-    bark = bark.rstrip() # remove the last space if present
-    mark = random.choice(['!', '?', '!?', '?!'])
+    bark = bark.rstrip() # remove the last space (if any)
+    mark = random.choice(marks)
     message = f"_{bark}{mark}_"
     context.bot.send_message(chat_id=chat_id, text=message,
                              reply_to_message_id=message_id,
@@ -451,7 +472,7 @@ def error(update, context):
                                  parse_mode=ParseMode.MARKDOWN)
 
     error_string = str(context.error).replace("_", "\\_")  # MARKDOWN escape
-    time_string = datetime.now().strftime(status['time_format'])
+    time_string = datetime.now().isoformat()
 
     message = (
         f"Error at time: {time_string}\n"
@@ -463,14 +484,20 @@ def error(update, context):
         context.bot.send_message(chat_id=chat_id, text=message)
 
     # user message
-    chat_id = update.effective_chat.id
-    message = f"_Oh h*ck, the bot is doing a splish splosh_ \n *Please try again*"
+    if update:
+        # we want to skip this message if the error wasn't triggered by
+        #   an update
+        chat_id = update.effective_chat.id
+        message = (
+            f"_Oh h*ck, the bot is doing a splish splosh_ \n"
+            f"*Please try again*"
+            )
 
-    context.bot.send_message(chat_id=chat_id, text=message,
-                             parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(chat_id=chat_id, text=message,
+                                 parse_mode=ParseMode.MARKDOWN)
 
     # logs to file
-    logging.error('Update "%s" caused error "%s"', update, context.error)
+    logging.error(f"Update {update} caused error {context.error}")
 
 
 # In order to use the Reddit object, you must
@@ -487,7 +514,7 @@ def error(update, context):
 # we log everything into the "corgos_bot.log" file
 logging.basicConfig(filename="corgos_bot.log", level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s',
-                    filemode="a")
+                    filemode="w")
 
 # Reddit section
 r = Reddit()

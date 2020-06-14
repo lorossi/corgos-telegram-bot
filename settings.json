@@ -14,7 +14,6 @@
             "ADMIN-TELEGRAM-ID"
         ],
         "corgos_sent": 0,
-        "time_format": "%Y/%m/%d %H:%M:%S",
-        "start_date": "START-DATE-(must time_format compliant)"
+        "start_date": "START-DATE-(must be iso-8601 compliant)"
     }
 }
