@@ -50,12 +50,13 @@ However, I plan to add one command to get photos of my corgi as soon as I manage
 ## Installation
 I provided a requirements.txt file in order to automatically install all the needed requirements. <br>
 If you want to run this bot yourself on your machine, you have to follow a few steps:
-1. Register to Reddit Api
-2. Create a Telegram bot using \@botfather on Telegram and set the command list as it's provided in the *commandlist.md* file
-3. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
-4. Fill the *settings.json* with the data you have gathered so far (Reddit access details, Telegram token)
-5. Install all the requirements via the command `pip3 install -r requirements.txt`
-6. Finally, run the script with `python3 corgos_bot.py`. The script will log everything in a file (named *logging.log*) in the same folder.
+1. Rename the file *settings.json.example* into *settings.json*
+2. Register to Reddit Api
+3. Create a Telegram bot using \@BotFather on Telegram and set the command list as it's provided in the *commandlist.md* file
+4. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
+5. Fill the *settings.json* with the data you have gathered so far (Reddit access details, Telegram token)
+6. Install all the requirements via the command `pip3 install -r requirements.txt`
+7. Finally, run the script with `python3 corgos_bot.py`. The script will log everything in a file (named *logging.log*) in the same folder.
 
 There you go! Your very own corgi-spamming-machine is up and running!
 
