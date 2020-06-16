@@ -66,7 +66,8 @@ class Reddit:
     # returns some meaningful informations needed in callbacks
     def showStatus(self):
         return {
-            "golden_corgos_found": self.golden_corgos_found
+            "golden_corgos_found": self.golden_corgos_found,
+            "golden_corgo_url": self.golden_corgo_url
         }
 
     #  Logs in reddit and return the reddit object
@@ -196,9 +197,9 @@ class Telegram:
         self.dispatcher = self.updater.dispatcher
         self.jobqueue = self.updater.job_queue
 
-        # Bot start notification
+        # bot start notification
         self.jobqueue.run_once(bot_started, when=0, name="bot_started")
-        # Load posts for the first time
+        # load posts for the first time
         self.jobqueue.run_once(load_posts, when=0, name="load_posts")
 
         # 2.20 AM GMT (timezone might change)
@@ -209,13 +210,17 @@ class Telegram:
         self.jobqueue.run_daily(load_posts, days=job_days,
                                 time=job_time, name="load_posts")
 
+        # this handler will notify the admins and the user if something went
+        #   wrong during the execution
         self.dispatcher.add_error_handler(error)
 
+        # these are the handlers for all the commands
         self.dispatcher.add_handler(CommandHandler('start', start))
         self.dispatcher.add_handler(CommandHandler('stop', stop))
         self.dispatcher.add_handler(CommandHandler('reset', reset))
         self.dispatcher.add_handler(CommandHandler('corgo', corgo))
         self.dispatcher.add_handler(CommandHandler('goldencorgo', goldencorgo))
+        self.dispatcher.add_handler(CommandHandler('check', check))
         self.dispatcher.add_handler(CommandHandler('stats', stats))
         self.dispatcher.add_handler(CommandHandler('ping', ping))
 
@@ -266,6 +271,8 @@ def start(update, context):
     context.bot.send_message(chat_id=chat_id, text=message,
                              parse_mode=ParseMode.MARKDOWN)
 
+    logging.info("/start called")
+
 
 # Function that COMPLETELY stops the bot
 # Callback fired with command /stop
@@ -281,7 +288,7 @@ def stop(update, context):
         # save settings just in case
         t.saveSettings()
         t.updater.stop()
-        logging.warning("Bot stopped")
+        logging.warning(f"Stopped by chat id {chat_id}")
         os._exit()
         exit()
     else:
@@ -301,7 +308,7 @@ def reset(update, context):
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
 
-        logging.warning("Resetting")
+        logging.warning(f"Reset by chat id {chat_id}")
         # System command to reload the python script
         os.execl(sys.executable, sys.executable, * sys.argv)
 
@@ -325,7 +332,7 @@ def corgo(update, context):
         context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
     except Exception as e:
         logging.error(f"Error while sending photo. Url {url} Error {e}")
-        raise Exception(f"Url {url} is not valid")
+        raise Exception(f"Url {url} is not valid. Error {e}")
         # at this point, an exception is raised and the error function is
         #   called. The user gets notified and prompted to try again.
 
@@ -364,7 +371,62 @@ def goldencorgo(update, context):
     context.bot.send_message(chat_id=chat_id, text=message,
                              parse_mode=ParseMode.MARKDOWN)
 
-    logging.info("Golden corgo sent")
+    logging.info("/goldencorgo called")
+
+
+# Function that checks if the golden corgo picture is still available by
+#   sending it to the user and deleting it a shot while after
+# Callback fired with command /check
+# Hidden command as it's not the in command list
+def check(update, context):
+    chat_id = update.effective_chat.id
+    status = t.showStatus()
+
+    if chat_id in status["admins"]:
+        r_status = r.showStatus()  # Reddit status in order to get the URL
+        url = r_status["golden_corgo_url"]
+
+        bot_username = t.updater.bot.get_me()["username"]
+        caption = f"@{bot_username}"
+
+        to_delete = []  # array containing the id of the messages to delete
+        try:
+            m = context.bot.send_photo(chat_id=chat_id,
+                                       photo=url, caption=caption)
+            to_delete.append(m["message_id"])
+
+            """
+            message = f"*This message will be deleted soon*"
+            m = context.bot.send_message(chat_id=chat_id, text=message,
+                                         parse_mode=ParseMode.MARKDOWN)
+            to_delete.append(m["message_id"])
+            """
+
+            message = "*The golden corgo URL is still working!*"
+            context.bot.send_message(chat_id=chat_id, text=message,
+                                     parse_mode=ParseMode.MARKDOWN)
+
+        except Exception as e:
+            message = f"*Golden Corgo picture not found!*\n"
+            context.bot.send_message(chat_id=chat_id, text=message,
+                                     parse_mode=ParseMode.MARKDOWN)
+            log = (
+                f"Error while sending checking golden corgo. "
+                f"Url {url} Error {e}"
+            )
+            logging.error(log)
+            raise Exception(f"Url {url} is not a valid golden corgo url!")
+
+        # we now delete the sent messages (if any) to keep the SECRET
+        for message_id in to_delete:
+            context.bot.delete_message(chat_id, message_id)
+
+    else:
+        message = "*This command is for moderators only*"
+        context.bot.send_message(chat_id=chat_id, text=message,
+                                 parse_mode=ParseMode.MARKDOWN)
+
+    logging.info("/check called")
 
 
 # Function that return stats about the bot
@@ -423,34 +485,44 @@ def text_message(update, context):
 
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
+    message_text = update.message.text.upper()
     barks = ['ARF ', 'WOFF ', 'BORK ', 'RUFF ']
-    swearwords = ['HECK', 'GOSH', 'DARN']
+    swearwords = ['HECK', 'GOSH', 'DARN', 'SHOOT', 'FRICK', 'FLIP']
     marks = ['!', '?', '!?', '?!']
-    
+
     # if the message is a "swear word", we want to notify the user that we
-    # don't tolerate it here
+    #   don't tolerate it here
     for s in swearwords:
-        if s in update.message.text.upper():
-            message = f"_No H*CKING BAD LANGUAGE HERE!_"
+        if s in message_text:
+            message = f"_NO H*CKING BAD LANGUAGE HERE!_"
             context.bot.send_message(chat_id=chat_id, text=message,
-                                    reply_to_message_id=message_id,
-                                    parse_mode=ParseMode.MARKDOWN)
+                                     reply_to_message_id=message_id,
+                                     parse_mode=ParseMode.MARKDOWN)
             return
 
     # if the message contains a "bark", we want to reply accordingly
     for b in barks:
-        if b.strip() in update.message.text.upper():
+        if b.strip() in message_text:
             message = f"_{b.strip()}!_"
             context.bot.send_message(chat_id=chat_id, text=message,
-                                    reply_to_message_id=message_id,
-                                    parse_mode=ParseMode.MARKDOWN)
+                                     reply_to_message_id=message_id,
+                                     parse_mode=ParseMode.MARKDOWN)
+            return
+
+    # if the message contains the word "corgo", we want to tell the user
+    #   to use the correct command
+    if "CORGO" in message_text:
+            message = "_Press /corgo to get a corgo!_"
+            context.bot.send_message(chat_id=chat_id, text=message,
+                                     reply_to_message_id=message_id,
+                                     parse_mode=ParseMode.MARKDOWN)
             return
 
     # we want to generate some gibberish answer to every message
     # the dog noise list was sourced on Wikipedia. Yes, Wikipedia.
     bark = random.choice(barks)
-    bark *= random.randint(1, 2) # get some repetition
-    bark = bark.rstrip() # remove the last space (if any)
+    bark *= random.randint(1, 2)  # get some repetition
+    bark = bark.rstrip()  # remove the last space (if any)
     mark = random.choice(marks)
     message = f"_{bark}{mark}_"
     context.bot.send_message(chat_id=chat_id, text=message,
@@ -469,6 +541,7 @@ def error(update, context):
         # HECC
         message = "*ERROR RAISED*"
         context.bot.send_message(chat_id=chat_id, text=message,
+                                 disable_web_page_preview=True,
                                  parse_mode=ParseMode.MARKDOWN)
 
     error_string = str(context.error).replace("_", "\\_")  # MARKDOWN escape
@@ -500,29 +573,35 @@ def error(update, context):
     logging.error(f"Update {update} caused error {context.error}")
 
 
-# In order to use the Reddit object, you must
-#   1) Load the settings from file with the loadSettings() method
-#   2) Login into reddit with the login() method
-# In order to use the Telegram object, you must
-#   1) Load the settings from file with the loadSettings() method
-#   2) Start the dispatcher, updater, joqueue with the start() method
+def main():
+    # In order to use the Reddit object, we must
+    #   1) Load the settings from file with the loadSettings() method
+    #   2) Login into reddit with the login() method
+    # In order to use the Telegram object, we must
+    #   1) Load the settings from file with the loadSettings() method
+    #   2) Start the dispatcher, updater, joqueue with the start() method
 
-# --- MAIN CODE --- #
-# I didn't want to use a main function beacuse the global callbacks mess with
-# the scope of the objects
+    # we log everything into the "corgos_bot.log" file
+    logging.basicConfig(filename="corgos_bot.log", level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(message)s',
+                        filemode="w")
 
-# we log everything into the "corgos_bot.log" file
-logging.basicConfig(filename="corgos_bot.log", level=logging.INFO,
-                    format='%(asctime)s %(levelname)s %(message)s',
-                    filemode="w")
+    # we have to declare the Reddit and Telgram objects as global variables
+    #   in order to use them inside callbacks
+    global r, t
 
-# Reddit section
-r = Reddit()
-r.loadSettings()
-r.login()
+    # Reddit section
+    r = Reddit()
+    r.loadSettings()
+    r.login()
 
-# Telegram section
-t = Telegram()
-t.loadSettings()
-t.start()
-# after this, automatically calls the "load_posts" routine.
+    # Telegram section
+    t = Telegram()
+    t.loadSettings()
+    t.start()
+
+    # after this, automatically calls the "load_posts" routine.
+
+
+if __name__ == "__main__":
+    main()

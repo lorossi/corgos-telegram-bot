@@ -20,6 +20,8 @@ Furthermore, there are 3 more *hidden* commands (as they are not listed):
 * */ping* will reply **PONG**, I coded this to make sure that the bot was currently running and any user can use this.
 * */stop* will stop the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
 * */reset* will reload the script. This command can only be used by users whose id is in the *admins* settings in the config file.
+* */check* will check if the url pointing to the Golden Corgo is still valid. If the check is successfull, the golden corgo will be sent and deleted shortly after.
+
 
 The bot will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human. Also it hates swearwords. Watch your languge.
 
