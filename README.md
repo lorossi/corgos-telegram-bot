@@ -16,7 +16,7 @@ Usage of the commands:
 * */goldencorgo* will tell you the tale of the Golden Corgo.
 * */stats* will tell you some (mostly useless) information about the bot.
 
-Furthermore, there are 3 more *hidden* commands (as they are not listed):
+Furthermore, there are 4 more *hidden* commands (as they are not listed):
 * */ping* will reply **PONG**, I coded this to make sure that the bot was currently running and any user can use this.
 * */stop* will stop the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
 * */reset* will reload the script. This command can only be used by users whose id is in the *admins* settings in the config file.
@@ -51,7 +51,7 @@ However, I plan to add one command to get photos of my corgi as soon as I manage
 I provided a requirements.txt file in order to automatically install all the needed requirements. <br>
 If you want to run this bot yourself on your machine, you have to follow a few steps:
 1. Register to Reddit Api
-2. Create a Telegram bot using \@botfather on Telegram and set the command list as it's provided in the code (line 145)
+2. Create a Telegram bot using \@botfather on Telegram and set the command list as it's provided in the *commandlist.md* file
 3. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
 4. Fill the *settings.json* with the data you have gathered so far (Reddit access details, Telegram token)
 5. Install all the requirements via the command `pip3 install -r requirements.txt`

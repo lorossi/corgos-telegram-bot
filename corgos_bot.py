@@ -142,13 +142,6 @@ class Reddit:
         self.settings["golden_corgos_found"] = self.golden_corgos_found
         self.saveSettings()
 
-
-# ---------------- COMMAND LIST AS IT IS PASSED TO @botfather --------------- #
-# goldencorgo - Read the tale of this misterious creature...                  #
-# corgo - When you just need a corgo                                          #
-# stats - See some stats about this bot                                       #
-# --------------------------------------------------------------------------- #
-
 # this class contains all the methods and variables needed to control the
 # Telegram bot
 class Telegram:
@@ -394,13 +387,6 @@ def check(update, context):
             m = context.bot.send_photo(chat_id=chat_id,
                                        photo=url, caption=caption)
             to_delete.append(m["message_id"])
-
-            """
-            message = f"*This message will be deleted soon*"
-            m = context.bot.send_message(chat_id=chat_id, text=message,
-                                         parse_mode=ParseMode.MARKDOWN)
-            to_delete.append(m["message_id"])
-            """
 
             message = "*The golden corgo URL is still working!*"
             context.bot.send_message(chat_id=chat_id, text=message,
