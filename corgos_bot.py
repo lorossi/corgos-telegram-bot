@@ -378,6 +378,10 @@ def check(update, context):
     if chat_id in status["admins"]:
         r_status = r.showStatus()  # Reddit status in order to get the URL
         url = r_status["golden_corgo_url"]
+        # we want to get the "small" image in order to make this whole process
+        #   slightly faster. imgur provides different image sizes by editing
+        #   its url a bit
+        small_url = url.replace(".jpg", "s.jpg")
 
         bot_username = t.updater.bot.get_me()["username"]
         caption = f"@{bot_username}"
