@@ -3,6 +3,8 @@ This file contains the text to paste in \@BotFather when asked for the command l
 
 ### Text to paste
 
-goldencorgo - Read the tale of this misterious creature...
+goldencorgo - Read the tale of this mysterious creature...
+
 corgo - When you just need a corgo
+
 stats - See some stats about this bot
