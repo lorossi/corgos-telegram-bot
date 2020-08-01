@@ -14,6 +14,8 @@
             "ADMIN-TELEGRAM-ID"
         ],
         "corgos_sent": 0,
-        "start_date": "START-DATE-(must be iso-8601 compliant)"
+        "start_date": "START-DATE-(must be iso-8601 compliant)",
+        "load_days": [LOAD-DAYS-(weekdays 0 to 7)-days in which new corgos will be fetched],
+        "load_time": "MINUTES-AFTER-MIDNIGHT-(int)-delay for corgos loading relative to midnight"
     }
 }

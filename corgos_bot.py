@@ -158,6 +158,15 @@ class Telegram:
         self.corgos_sent = self.settings["corgos_sent"]
         self.start_date = self.settings["start_date"]
 
+        # on which days the corgos will be fetched. Must be converted to tuple
+        #   since JSON only supports arrays. 0 for monday through 6 for sunday
+        self.load_days = tuple(self.settings["load_days"])
+
+        minutes = self.settings["load_time"] % 60
+        hours = int(self.settings["load_time"] / 60)
+        # load time expressed in minutes after midnight (GMT time)
+        self.load_time = time(minute=minutes, hour=hours)
+
     # Saves settings into file
     def saveSettings(self):
         with open(self.settings_path) as json_file:
@@ -195,13 +204,9 @@ class Telegram:
         # load posts for the first time
         self.jobqueue.run_once(load_posts, when=0, name="load_posts")
 
-        # 2.20 AM GMT (timezone might change)
-        job_time = time(2, 20, 0)
-        # Monday and Thursday
-        job_days = (0, 2, 5)
-        # load new posts
-        self.jobqueue.run_daily(load_posts, days=job_days,
-                                time=job_time, name="load_posts")
+        # load fresh corgos on set days
+        self.jobqueue.run_daily(load_posts, days=self.load_days,
+                                time=self.load_time, name="load_posts")
 
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
