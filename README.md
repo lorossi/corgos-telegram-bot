@@ -6,7 +6,7 @@
 I like corgis. Like, a lot. Sadly I cannot adopt one right now on in the near future, so I made the most reasonable thing a person could do:
 I made a Telegram Bot that sends me a corgi picture whenever I want, like any sane person.
 
-The bot is coded in Python by using the [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) library in order to interface with the official [Telegram api](https://core.telegram.org/)
+The bot is coded in Python by using the [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) library in order to interface with the official [Telegram api](https://core.telegram.org/).
 
 ### Usage
 The bot it's pretty straightforward to use. Just start a conversation with \@corgos_bot or navigate to t.me/corgos_bot to start using it.
