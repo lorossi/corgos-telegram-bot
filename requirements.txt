@@ -1,2 +1,2 @@
-praw == 6.5.1
-python_telegram_bot == 12.6.1
+praw >= 6.5.1
+python_telegram_bot >= 12.6.1
