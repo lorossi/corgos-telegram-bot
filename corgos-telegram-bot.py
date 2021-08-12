@@ -18,7 +18,7 @@ from urllib.request import urlopen
 from datetime import datetime, time
 from telegram import ParseMode, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackContext, \
-                         MessageHandler, Filters
+    MessageHandler, Filters
 
 
 class Reddit:
@@ -26,12 +26,12 @@ class Reddit:
     # urls of the pictures from reddit
 
     def __init__(self):
-        # intializes the queue to be empty at startup
+        # initializes the queue to be empty at startup
         self.queue = []
 
     # loads settings from the settings file.
     def loadSettings(self, path="settings.json"):
-        # unless specified, we use the default setting spath
+        # unless specified, we use the default settings path
         self.settings_path = path
         with open(self.settings_path) as json_file:
             # only keeps settings for Reddit, discarding others
@@ -87,7 +87,7 @@ class Reddit:
 
         for s in submissions:
 
-            # skips sticked and selftexts, we don't need those
+            # skips stickied and selftexts, we don't need those
             if s.selftext or s.stickied:
                 continue
 
@@ -104,7 +104,7 @@ class Reddit:
                 # log the content type in order to make sure it's an image
                 content_type = urlopen(s.url).info()["content-type"]
             except Exception as e:
-                # if it fails, it's beacuse the image has been removed
+                # if it fails, it's because the image has been removed
                 logging.error(f"Cannot open url {s.url}, error {e}")
                 continue
 
@@ -223,7 +223,7 @@ class Telegram:
         self.dispatcher.add_handler(CommandHandler('stats', stats))
         self.dispatcher.add_handler(CommandHandler('ping', ping))
 
-        # cathces every message and replies with some gibberish
+        # catches every message and replies with some gibberish
         self.dispatcher.add_handler(MessageHandler(Filters.text, text_message))
 
         self.updater.start_polling()
@@ -235,8 +235,8 @@ class Telegram:
 # Callback fired at startup from JobQueue
 def bot_started(context: CallbackContext):
     status = t.showStatus()
+    message = "*Bot started*"
     for chat_id in status["admins"]:
-        message = "*Bot started*"
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
 
@@ -276,7 +276,7 @@ def start(update, context):
 # Function that COMPLETELY stops the bot
 # Callback fired with command /stop
 # Hidden command as it's not the in command list
-def stop(update, context):
+def stop(update, context):  # sourcery skip: extract-method
     chat_id = update.effective_chat.id
     status = t.showStatus()
 
@@ -325,7 +325,7 @@ def corgo(update, context):
     # I might find a better way of checking urls but I fear it might
     #   be too slow. There's no real way to know if an image is still available
     #   unless trying to send it. It shouldn't happen often, but the method I
-    #   used previoulsy managed to crash both the script and the RaspberryPi
+    #   used previously managed to crash both the script and the RaspberryPi
     try:
         url = r.getUrl()
         context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
@@ -354,7 +354,7 @@ def goldencorgo(update, context):
     message = (
         f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
         f"All we know is that if you are lucky enough, once in maybe "
-        f"1000 corgos you migh find one. \n"
+        f"1000 corgos you might find one. \n"
         f"_So far, {golden_corgos_found} have been found "
         f"roaming this bot..._"
     )
@@ -377,7 +377,7 @@ def goldencorgo(update, context):
 #   sending it to the user and deleting it a shot while after
 # Callback fired with command /check
 # Hidden command as it's not the in command list
-def check(update, context):
+def check(update, context):  # sourcery skip: extract-method
     chat_id = update.effective_chat.id
     status = t.showStatus()
 
@@ -435,7 +435,7 @@ def stats(update, context):
 
     # bot started date
     d1 = datetime.fromisoformat(status["start_date"])
-    # todays date
+    # today's date
     d2 = datetime.now()
     days_between = (d2 - d1).days + 1
     # Average number of corgos sent per day
@@ -559,7 +559,7 @@ def error(update, context):
         message = (
             "_Oh h*ck, the bot is doing a splish splosh_ \n"
             "*Please try again*"
-            )
+        )
 
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
