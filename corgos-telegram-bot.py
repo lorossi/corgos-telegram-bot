@@ -311,6 +311,7 @@ class Telegram:
                 #   prompted to try again.
                 # The image gets then remove from the queue
 
+        self._corgos_sent += 1
         message = "_Press /corgo for another corgo!_"
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
@@ -361,6 +362,7 @@ class Telegram:
 
         if chat_id in self.admins:
             url = self._golden_corgo_url
+
             # we want to get the "small" image in order to make this
             # whole process  slightly faster. imgur provides different
             # image sizes by editing its url a bit
