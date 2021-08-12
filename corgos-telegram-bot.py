@@ -22,16 +22,23 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, \
 
 
 class Reddit:
-    # This class contains all the methods and variables needed to load the
-    # urls of the pictures from reddit
+    """
+    This class contains all the methods and variables needed to load the
+    urls of the pictures from reddit
+    """
 
     def __init__(self):
-        # initializes the queue to be empty at startup
+        """
+        initializes the queue to be empty at startup
+        """
         self.queue = []
 
-    # loads settings from the settings file.
     def loadSettings(self, path="settings.json"):
-        # unless specified, we use the default settings path
+        """
+        loads settings from the settings file.
+        unless specified, we use the default settings path
+        """
+
         self.settings_path = path
         with open(self.settings_path) as json_file:
             # only keeps settings for Reddit, discarding others
@@ -51,8 +58,11 @@ class Reddit:
         # image formats
         self.image_formats = ("image/png", "image/jpeg")
 
-    # saves settings into file
     def saveSettings(self):
+        """
+        saves settings into file
+        """
+
         with open(self.settings_path) as json_file:
             old_settings = json.load(json_file)
 
@@ -63,23 +73,32 @@ class Reddit:
         with open(self.settings_path, 'w') as outfile:
             json.dump(old_settings, outfile, indent=4)
 
-    # returns some meaningful informations needed in callbacks
     def showStatus(self):
+        """
+        returns some meaningful informations needed in callbacks
+        """
+
         return {
             "golden_corgos_found": self.golden_corgos_found,
             "golden_corgo_url": self.golden_corgo_url
         }
 
-    #  Logs in reddit and return the reddit object
     def login(self):
+        """
+        logs in reddit and return the reddit object
+        """
+
         self.reddit = praw.Reddit(client_id=self.client_id,
                                   client_secret=self.client_secret,
                                   user_agent=self.user_agent)
 
         logging.info("Logged into Reddit")
 
-    # loads all posts and returns the number of scraped urls
     def loadPosts(self):
+        """
+        loads all posts and returns the number of scraped urls
+        """
+
         subreddit = self.reddit.subreddit('corgi+babycorgis')
         submissions = subreddit.top('week', limit=self.post_limit)
         # empties the queue
@@ -119,8 +138,11 @@ class Reddit:
         random.shuffle(self.queue)
         return len(self.queue)
 
-    # returns the url of a photo
     def getUrl(self):
+        """
+        returns the url of a photo
+        """
+
         # if somehow we did not load anything, we reload some posts
         # this should likely never happen, but might be triggered if the queue
         # has not been loaded yet
@@ -136,18 +158,26 @@ class Reddit:
         self.queue.append(self.queue.pop(0))  # list rotation
         return url
 
-    # Updates number of golden corgos found and saves it to file
     def updateGoldenCorgosFound(self, count=1):
+        """
+        updates number of golden corgos found and saves it to file
+        """
         self.golden_corgos_found += 1
         self.settings["golden_corgos_found"] = self.golden_corgos_found
         self.saveSettings()
 
 
-# this class contains all the methods and variables needed to control the
-# Telegram bot
 class Telegram:
-    # loads settings from the settings file.
+    """
+    this class contains all the methods and variables needed to control the
+    Telegram bot
+    """
+
     def loadSettings(self, path="settings.json"):
+        """
+        loads settings from the settings file.
+        """
+
         self.settings_path = path
         with open(self.settings_path) as json_file:
             # only keeps settings for Telegram, discarding others
@@ -168,8 +198,11 @@ class Telegram:
         # load time expressed in minutes after midnight (GMT time)
         self.load_time = time(minute=minutes, hour=hours)
 
-    # Saves settings into file
     def saveSettings(self):
+        """
+        saves settings into file
+        """
+
         with open(self.settings_path) as json_file:
             old_settings = json.load(json_file)
 
@@ -180,22 +213,31 @@ class Telegram:
         with open(self.settings_path, 'w') as outfile:
             json.dump(old_settings, outfile, indent=4)
 
-    # Updates number of corgos sent and saves it to file
-    def updateCorgosSent(self, count=1):
+    def updateCorgosSent(self):
+        """
+        updates number of corgos sent and saves it to file
+        """
+
         self.corgos_sent += 1
         self.settings["corgos_sent"] = self.corgos_sent
         self.saveSettings()
 
-    # Returns some meaningful informations needed in callbacks
     def showStatus(self):
+        """
+        returns some meaningful informations needed in callbacks
+        """
+
         return {
             "admins": self.admins,
             "corgos_sent": self.corgos_sent,
             "start_date": self.start_date,
         }
 
-    # Starts the bot
     def start(self):
+        """
+        starts the bot
+        """
+
         self.updater = Updater(self.token, use_context=True)
         self.dispatcher = self.updater.dispatcher
         self.jobqueue = self.updater.job_queue
@@ -231,9 +273,11 @@ class Telegram:
         self.updater.idle()
 
 
-# Function that sends a message to admins whenever the bot is started.
-# Callback fired at startup from JobQueue
 def bot_started(context: CallbackContext):
+    """
+    Function that sends a message to admins whenever the bot is started.
+    Callback fired at startup from JobQueue
+    """
     status = t.showStatus()
     message = "*Bot started*"
     for chat_id in status["admins"]:
@@ -241,9 +285,11 @@ def bot_started(context: CallbackContext):
                                  parse_mode=ParseMode.MARKDOWN)
 
 
-# Function that loads posts from reddit
-# Callback fired at startup and at night in set days from JobQueue
 def load_posts(context: CallbackContext):
+    """
+    Function that loads posts from reddit
+    Callback fired at startup and at night in set days from JobQueue
+    """
     logging.info("Loading posts")
     status = t.showStatus()
 
@@ -262,9 +308,11 @@ def load_posts(context: CallbackContext):
     logging.info("Posts loaded")
 
 
-# Function that greets user during first start
-# Callback fired with command /start
 def start(update, context):
+    """
+    Function that greets user during first start
+    Callback fired with command /start
+    """
     chat_id = update.effective_chat.id
     message = "_Press /corgo to get a corgo!_"
     context.bot.send_message(chat_id=chat_id, text=message,
@@ -273,10 +321,13 @@ def start(update, context):
     logging.info("/start called")
 
 
-# Function that COMPLETELY stops the bot
-# Callback fired with command /stop
-# Hidden command as it's not the in command list
 def stop(update, context):  # sourcery skip: extract-method
+    """
+    Function that COMPLETELY stops the bot
+    Callback fired with command /stop
+    Hidden command as it's not the in command list
+    """
+
     chat_id = update.effective_chat.id
     status = t.showStatus()
 
@@ -296,10 +347,13 @@ def stop(update, context):  # sourcery skip: extract-method
                                  parse_mode=ParseMode.MARKDOWN)
 
 
-# Function that resets the bot
-# Callback fired with command /reset
-# Hidden command as it's not the in command list
 def reset(update, context):
+    """
+    Function that resets the bot
+    Callback fired with command /reset
+    Hidden command as it's not the in command list
+    """
+
     chat_id = update.effective_chat.id
     status = t.showStatus()
     if chat_id in status["admins"]:
@@ -312,9 +366,12 @@ def reset(update, context):
         os.execl(sys.executable, sys.executable, * sys.argv)
 
 
-# Function that sends a corgo to the user
-# Callback fired with command /corgo
 def corgo(update, context):
+    """
+    Function that sends a corgo to the user
+    Callback fired with command /corgo
+    """
+
     chat_id = update.effective_chat.id
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -343,9 +400,12 @@ def corgo(update, context):
     logging.info("Corgo sent")
 
 
-# Function that narrates the legend of the golden corgo to the user
-# Callback fired with command /goldencorgo
 def goldencorgo(update, context):
+    """
+    Function that narrates the legend of the golden corgo to the user
+    Callback fired with command /goldencorgo
+    """
+
     chat_id = update.effective_chat.id
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     bot_username = t.updater.bot.get_me()["username"].replace("_", "\\_")
@@ -373,11 +433,14 @@ def goldencorgo(update, context):
     logging.info("/goldencorgo called")
 
 
-# Function that checks if the golden corgo picture is still available by
-#   sending it to the user and deleting it a shot while after
-# Callback fired with command /check
-# Hidden command as it's not the in command list
 def check(update, context):  # sourcery skip: extract-method
+    """
+    Function that checks if the golden corgo picture is still available by
+     sending it to the user and deleting it a shot while after
+    Callback fired with command /check
+    Hidden command as it's not the in command list
+    """
+
     chat_id = update.effective_chat.id
     status = t.showStatus()
 
@@ -425,9 +488,12 @@ def check(update, context):  # sourcery skip: extract-method
     logging.info("/check called")
 
 
-# Function that return stats about the bot
-# Callback fired with command  /stats
 def stats(update, context):
+    """
+    Function that return stats about the bot
+    Callback fired with command  /stats
+    """
+
     chat_id = update.effective_chat.id
     context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     status = t.showStatus()
@@ -455,12 +521,13 @@ def stats(update, context):
     logging.info("/stats called")
 
 
-# Function that simply replies "PONG"
-# Callback fired with command /ping for debug purposes (truth to be told, my
-#   RPi zero was sometimes so bloated I was never sure if this script crashed,
-#   so I wanted a way to prevent useless panicking and debugging)
-# Hidden command as it's not the in command list
 def ping(update, context):
+    """
+    Function that simply replies "PONG"
+    Callback fired with command /ping for debug purposes
+    Hidden command as it's not the in command list
+    """
+
     message = "🏓 *PONG* 🏓"
     context.bot.send_message(chat_id=update.effective_chat.id, text=message,
                              parse_mode=ParseMode.MARKDOWN)
@@ -472,6 +539,14 @@ def ping(update, context):
 #   In order to enable it, the "group privacy" settings in @botfather must be
 #   set to "False"
 def text_message(update, context):
+    """
+    Function that sends random dog barks
+    Callback fired whenever a text message is sent
+    This is currently disabled in groups because it WILL lead to excessive spam.
+       In order to enable it, the "group privacy" settings in @botfather must be
+       set to "False"
+    """
+
     if not update.message:
         return
 
@@ -525,9 +600,13 @@ def text_message(update, context):
                              parse_mode=ParseMode.MARKDOWN)
 
 
-# Function that logs in file and admin chat when an error occurs
-# Callback fired by errors and handled by telegram module
 def error(update, context):
+    """
+    Function that logs in file and admin chat when an error occurs
+    Callback fired whenever a text message is sent
+    Callback fired by errors and handled by telegram module
+    """
+
     logging.error(context.error)
     status = t.showStatus()
 
