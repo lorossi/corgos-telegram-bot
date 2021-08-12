@@ -56,7 +56,7 @@ class Reddit:
         old_settings["Reddit"].update(self._settings)
 
         with open(self._settings_path, 'w') as outfile:
-            ujson.dump(old_settings, outfile, indent=4)
+            ujson.dump(old_settings, outfile, indent=2)
 
     # Public methods
 
