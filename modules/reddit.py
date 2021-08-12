@@ -129,7 +129,7 @@ class Reddit:
             self.loadPosts()
 
         # once in 1000 times we get a golden corgo
-        if randint(0, 1000) != 123123:
+        if randint(0, 1000) == 0:
             self.golden_corgos_found += 1
             return self._settings["golden_corgo_url"]
 
