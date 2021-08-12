@@ -77,8 +77,8 @@ class Telegram:
         updates number of corgos sent and saves it to file
         """
 
-        self.corgos_sent += 1
-        self._settings["corgos_sent"] = self.corgos_sent
+        self._corgos_sent += 1
+        self._settings["corgos_sent"] = self._corgos_sent
         self._saveSettings()
 
     # Public methods
@@ -155,20 +155,20 @@ class Telegram:
     # Setter and getters
 
     @property
-    def admins(self):
+    def _admins(self):
         return self._settings["admins"]
 
     @property
-    def corgos_sent(self):
+    def _corgos_sent(self):
         return self._settings["corgos_sent"]
 
-    @corgos_sent.setter
-    def corgos_sent(self, value):
+    @_corgos_sent.setter
+    def _corgos_sent(self, value):
         self._settings["corgos_sent"] = value
         self._saveSettings()
 
     @property
-    def start_date(self):
+    def _start_date(self):
         return self._settings["start_date"]
 
     # Callbacks
@@ -179,7 +179,7 @@ class Telegram:
         Callback fired at startup from JobQueue
         """
         message = "*Bot started*"
-        for chat_id in self.admins:
+        for chat_id in self._admins:
             context.bot.send_message(chat_id=chat_id, text=message,
                                      parse_mode=ParseMode.MARKDOWN)
 
@@ -190,7 +190,7 @@ class Telegram:
         """
         logging.info("Loading posts")
 
-        for chat_id in self.admins:
+        for chat_id in self._admins:
             message = "*Loading posts...*"
             context.bot.send_message(chat_id=chat_id, text=message,
                                      parse_mode=ParseMode.MARKDOWN)
@@ -198,7 +198,7 @@ class Telegram:
         posts = self._reddit.loadPosts()
         message = f"*{posts} posts loaded!*"
 
-        for chat_id in self.admins:
+        for chat_id in self._admins:
             context.bot.send_message(chat_id=chat_id, text=message,
                                      parse_mode=ParseMode.MARKDOWN)
 
@@ -225,7 +225,7 @@ class Telegram:
 
         chat_id = update.effective_chat.id
 
-        if chat_id in self.admins:
+        if chat_id in self._admins:
             message = "_Bot stopped_"
             context.bot.send_message(chat_id=chat_id, text=message,
                                      parse_mode=ParseMode.MARKDOWN)
@@ -249,7 +249,7 @@ class Telegram:
 
         chat_id = update.effective_chat.id
 
-        if chat_id in self.admins:
+        if chat_id in self._admins:
             message = "_Resetting..._"
             context.bot.send_message(chat_id=chat_id, text=message,
                                      parse_mode=ParseMode.MARKDOWN)
@@ -285,7 +285,7 @@ class Telegram:
             # at this point, an exception is raised and the error function is
             #   called. The user gets notified and prompted to try again.
 
-        self.corgos_sent += 1
+        self._corgos_sent += 1
         message = "_Press /corgo for another corgo!_"
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
@@ -334,7 +334,7 @@ class Telegram:
 
         chat_id = update.effective_chat.id
 
-        if chat_id in self.admins:
+        if chat_id in self._admins:
             url = self._reddit.golden_corgo_url
             # we want to get the "small" image in order to make this
             # whole process  slightly faster. imgur provides different
@@ -389,11 +389,11 @@ class Telegram:
         d2 = datetime.now()
         days_between = (d2 - d1).days + 1
         # Average number of corgos sent per day
-        average = int(self.corgos_sent / days_between)
+        average = int(self._corgos_sent / days_between)
 
         message = (
             f"The bot has been running for *{days_between}* days.\n"
-            f"*{self.corgos_sent}* photos have been sent, "
+            f"*{self._corgos_sent}* photos have been sent, "
             f"averaging *{average}* corgos per day!"
             f" _{choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}_! \n"
             f"*{self._reddit.golden_corgos_found}* golden corgos were found!"
@@ -496,7 +496,7 @@ class Telegram:
 
         message = "*ERROR RAISED*"
         # admin message
-        for chat_id in self.admins:
+        for chat_id in self._admins:
             # HECC
             context.bot.send_message(chat_id=chat_id, text=message,
                                      disable_web_page_preview=True,
@@ -512,7 +512,7 @@ class Telegram:
             f"Update: {update}"
         )
 
-        for chat_id in self.admins:
+        for chat_id in self._admins:
             context.bot.send_message(chat_id=chat_id, text=message)
 
         # user message
