@@ -4,9 +4,7 @@
         "client_secret": "REDDIT-CLIENT-SECRET",
         "user_agent": "USER-AGENT",
         "post_limit": 250,
-        "min_score": 5,
-        "golden_corgos_found": 0,
-        "golden_corgo_url": "GOLDEN-CORGO-URL"
+        "min_score": 5
     },
     "Telegram": {
         "token": "TELEGRAM-BOT-TOKEN",
@@ -14,6 +12,8 @@
             "ADMIN-TELEGRAM-ID"
         ],
         "corgos_sent": 0,
+        "golden_corgos_found": 0,
+        "golden_corgo_url": "GOLDEN-CORGO-URL",
         "start_date": "START-DATE-(must be iso-8601 compliant)",
         "load_days": [LOAD-DAYS-(weekdays 0 to 7)-days in which new corgos will be fetched],
         "load_time": "MINUTES-AFTER-MIDNIGHT-(int)-delay for corgos loading relative to midnight"

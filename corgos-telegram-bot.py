@@ -77,8 +77,8 @@ class Telegram:
         updates number of corgos sent and saves it to file
         """
 
-        self.corgos_sent += 1
-        self._settings["corgos_sent"] = self.corgos_sent
+        self._corgos_sent += 1
+        self._settings["corgos_sent"] = self._corgos_sent
         self._saveSettings()
 
     # Public methods
@@ -152,24 +152,37 @@ class Telegram:
         logging.info("Bot started")
         self._updater.idle()
 
-    # Setter and getters
+    # Setters and getters
 
     @property
     def admins(self):
         return self._settings["admins"]
 
     @property
-    def corgos_sent(self):
+    def _corgos_sent(self):
         return self._settings["corgos_sent"]
 
-    @corgos_sent.setter
-    def corgos_sent(self, value):
+    @_corgos_sent.setter
+    def _corgos_sent(self, value):
         self._settings["corgos_sent"] = value
         self._saveSettings()
 
     @property
-    def start_date(self):
+    def _start_date(self):
         return self._settings["start_date"]
+
+    @property
+    def _golden_corgos_found(self):
+        return self._settings["golden_corgos_found"]
+
+    @_golden_corgos_found.setter
+    def _golden_corgos_found(self, value):
+        self._settings["golden_corgos_found"] = value
+        self._saveSettings()
+
+    @property
+    def _golden_corgo_url(self):
+        return self._settings["golden_corgo_url"]
 
     # Callbacks
 
@@ -270,22 +283,34 @@ class Telegram:
         bot_username = self._updater.bot.get_me()["username"]
         caption = f"@{bot_username}"
 
-        # not the best way of catching errors
-        # I might find a better way of checking urls but I fear it might
-        #   be too slow. There's no real way to know if an image is still
-        #   available unless trying to send it.
-        # It shouldn't happen often, but the method I used previously
-        # managed to crash both the script and the RaspberryPi
-        try:
-            url = self._reddit.getImage()
+        if randint(0, 1000) == 0:
+            # send a golden corgo
+            url = self._golden_corgo_url
             context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
-        except Exception as e:
-            logging.error(f"Error while sending photo. Url {url} Error {e}")
-            raise Exception(f"Url {url} is not valid. Error {e}")
-            # at this point, an exception is raised and the error function is
-            #   called. The user gets notified and prompted to try again.
+            self._golden_corgos_found += 1
+        else:
+            # not the best way of catching errors
+            # I might find a better way of checking urls but I fear it might
+            #   be too slow. There's no real way to know if an image is still
+            #   available unless trying to send it.
+            # It shouldn't happen often, but the method I used previously
+            # managed to crash both the script and the RaspberryPi
+            try:
+                url = self._reddit.getImage()
+                context.bot.send_photo(
+                    chat_id=chat_id, photo=url, caption=caption)
+                self._corgos_sent += 1
+            except Exception as e:
+                logging.error(
+                    f"Error while sending photo. Url {url} Error {e}"
+                )
+                self._reddit.removeImage(url)
+                raise Exception(f"Url {url} is not valid. Error {e}")
+                # at this point, an exception is raised and the error
+                #   function is called. The user gets notified and
+                #   prompted to try again.
+                # The image gets then remove from the queue
 
-        self.corgos_sent += 1
         message = "_Press /corgo for another corgo!_"
         context.bot.send_message(chat_id=chat_id, text=message,
                                  parse_mode=ParseMode.MARKDOWN)
@@ -307,7 +332,7 @@ class Telegram:
             f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
             f"All we know is that if you are lucky enough, once in maybe "
             f"1000 corgos you might find one. \n"
-            f"_So far, {self._reddit.golden_corgos_found} have been found "
+            f"_So far, {self._golden_corgos_found} have been found "
             f"roaming this bot..._"
         )
 
@@ -335,7 +360,7 @@ class Telegram:
         chat_id = update.effective_chat.id
 
         if chat_id in self.admins:
-            url = self._reddit.golden_corgo_url
+            url = self._golden_corgo_url
             # we want to get the "small" image in order to make this
             # whole process  slightly faster. imgur provides different
             # image sizes by editing its url a bit
@@ -389,14 +414,14 @@ class Telegram:
         d2 = datetime.now()
         days_between = (d2 - d1).days + 1
         # Average number of corgos sent per day
-        average = int(self.corgos_sent / days_between)
+        average = int(self._corgos_sent / days_between)
 
         message = (
             f"The bot has been running for *{days_between}* days.\n"
-            f"*{self.corgos_sent}* photos have been sent, "
+            f"*{self._corgos_sent}* photos have been sent, "
             f"averaging *{average}* corgos per day!"
             f" _{choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}_! \n"
-            f"*{self._reddit.golden_corgos_found}* golden corgos were found!"
+            f"*{self._golden_corgos_found}* golden corgos were found!"
         )
 
         context.bot.send_message(chat_id=update.effective_chat.id,
