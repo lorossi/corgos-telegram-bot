@@ -3,7 +3,7 @@ import praw
 import ujson
 import logging
 
-from random import shuffle, randint
+from random import shuffle
 from urllib.request import urlopen
 
 
@@ -128,26 +128,12 @@ class Reddit:
         if len(self._queue) == 0:
             self.loadPosts()
 
-        # once in 1000 times we get a golden corgo
-        if randint(0, 1000) == 0:
-            self.golden_corgos_found += 1
-            return self._settings["golden_corgo_url"]
-
         url = self._queue[0]  # first in rotation is the next url
         self._queue.append(self._queue.pop(0))  # list rotation
         return url
 
-    # Setters and getters
+    def removeImage(self, url):
+        self._queue.remove(url)
+        return
 
-    @property
-    def golden_corgos_found(self):
-        return self._settings["golden_corgos_found"]
-
-    @golden_corgos_found.setter
-    def golden_corgos_found(self, value):
-        self._settings["golden_corgos_found"] = value
-        self._saveSettings()
-
-    @property
-    def golden_corgo_url(self):
-        return self._settings["golden_corgo_url"]
+    # Setters and getter
