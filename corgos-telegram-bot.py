@@ -13,7 +13,7 @@ import sys
 import ujson
 import logging
 
-from modules.reddit import Reddit
+from reddit import Reddit
 
 from random import choice, randint
 from datetime import datetime, time
@@ -327,7 +327,8 @@ class Telegram:
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(
             chat_id=chat_id,
-            action=ChatAction.TYPING)
+            action=ChatAction.TYPING
+        )
 
         message = (
             f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
