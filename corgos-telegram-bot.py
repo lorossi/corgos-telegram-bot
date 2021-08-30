@@ -361,7 +361,7 @@ class Telegram:
 
         chat_id = update.effective_chat.id
 
-        if chat_id in self.admins:
+        if chat_id in self._admins:
             url = self._golden_corgo_url
 
             # we want to get the "small" image in order to make this
