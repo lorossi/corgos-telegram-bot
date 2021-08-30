@@ -30,7 +30,7 @@ class Telegram:
 
     def __init__(self):
         self._settings = {}
-        self._settings_path = "modules/settings.json"
+        self._settings_path = "settings.json"
         # load all the settings
         self._loadSettings()
         # create a Reddit handler
