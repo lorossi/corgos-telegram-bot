@@ -1,12 +1,15 @@
-# Corgos BOT, a fully functional Telegram image bot where all the photos
-#   are stolen from Reddit.
-# Contact him on telegram @corgos_bot (direct url: t.me/corgos_bot)
-# This bot DOES NOT LOG every chat and user. As such, it cannot
-#   (and it never will) send private message to the users or groups.
-# Made by Lorenzo Rossi, 2019. Grazie a Giorgia per l'idea.
-# This code is surprisingly fully PEP8 compliant.
-# Yeah, I'm about as surprised as you.
-# License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+"""
+Corgos BOT, a fully functional Telegram image bot where all the photos \
+  are stolen from Reddit.
+
+Contact him on telegram @corgos_bot (direct url: t.me/corgos_bot)
+This bot DOES NOT LOG every chat and user. As such, it cannot \
+  (and it never will) send private message to the users or groups.
+Made by Lorenzo Rossi, 2019. Grazie a Giorgia per l'idea.
+This code is surprisingly fully PEP8 compliant.
+Yeah, I'm about as surprised as you.
+License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+"""
 
 import os
 import sys
@@ -28,12 +31,11 @@ from telegram.ext import (
 
 
 class Telegram:
-    """
-    this class contains all the methods and variables needed to control the
-    Telegram bot
-    """
+    """This class contains all the methods and variables needed to \
+        control the Telegram bot."""
 
     def __init__(self):
+        """Init the bot, loading the settings as well."""
         self._settings = {}
         self._settings_path = "settings.json"
         # load all the settings
@@ -44,10 +46,7 @@ class Telegram:
     # Private methods
 
     def _loadSettings(self):
-        """
-        loads settings from the settings file.
-        """
-
+        """Load settings from the settings file."""
         with open(self._settings_path) as json_file:
             # only keeps settings for Telegram, discarding others
             self._settings = ujson.load(json_file)["Telegram"]
@@ -63,10 +62,7 @@ class Telegram:
         )
 
     def _saveSettings(self):
-        """
-        saves settings into file
-        """
-
+        """Save settings into file."""
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -78,37 +74,43 @@ class Telegram:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _updateCorgosSent(self):
-        """
-        updates number of corgos sent and saves it to file
-        """
-
+        """Update number of corgos sent and save to file."""
         self._corgos_sent += 1
         self._settings["corgos_sent"] = self._corgos_sent
         self._saveSettings()
 
-    def _addToBanned(self, chat_id):
+    def _addToBanned(self, chat_id: int):
+        """Add a chat_id to the banned list.
+
+        Args:
+            chat_id (int): id of the chat to ban
+        """
         if len(self._banned_chats) > 0:
+            # list already exists
             already_banned = self._banned_chats
             already_banned.append(chat_id)
             self._settings["banned"] = list(set(self._settings["banned"]))
         else:
+            # list doesn't exist yet
             self._banned_chats = [chat_id]
-
+        # save to file
         self._saveSettings()
 
-    def _removeFromBanned(self, chat_id):
+    def _removeFromBanned(self, chat_id: int):
+        """Remove a chat_id from the banned list.
+
+        Args:
+            chat_id (int): chat_id
+        """
         if chat_id in self._settings["banned"]:
             self._settings["banned"].remove(chat_id)
-
+        # save to file
         self._saveSettings()
 
     # Public methods
 
     def start(self):
-        """
-        starts the bot
-        """
-
+        """Start the bot."""
         self._updater = Updater(self._settings["token"], use_context=True)
 
         self._dispatcher = self._updater.dispatcher
@@ -210,8 +212,8 @@ class Telegram:
     # Callbacks
 
     def _botStarted(self, context: CallbackContext):
-        """
-        Function that sends a message to admins whenever the bot is started.
+        """Send a message to admins when the bot starts.
+
         Callback fired at startup from JobQueue
         """
         message = "*Bot started*"
@@ -221,8 +223,8 @@ class Telegram:
             )
 
     def _loadPosts(self, context: CallbackContext):
-        """
-        Function that loads posts from reddit
+        """Load posts from Reddit.
+
         Callback fired at startup and at night in set days from JobQueue
         """
         logging.info("Loading posts")
@@ -244,8 +246,8 @@ class Telegram:
         logging.info("Posts loaded")
 
     def _botStartCommand(self, update, context):
-        """
-        Function that greets user during first start
+        """Greet the user when /start is called.
+
         Callback fired with command /start
         """
         chat_id = update.effective_chat.id
@@ -257,12 +259,11 @@ class Telegram:
         logging.info("/start called")
 
     def _botStopCommand(self, update, context):
-        """
-        Function that COMPLETELY stops the bot
+        """Completely stops the bot.
+
         Callback fired with command /stop
         Hidden command as it's not the in command list
         """
-
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -283,12 +284,11 @@ class Telegram:
             )
 
     def _botResetCommand(self, update, context):
-        """
-        Function that resets the bot
+        """Reset the bot.
+
         Callback fired with command /reset
         Hidden command as it's not the in command list
         """
-
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -302,11 +302,10 @@ class Telegram:
             os.execl(sys.executable, sys.executable, *sys.argv)
 
     def _botCorgoCommand(self, update, context):
-        """
-        Function that sends a corgo to the user
+        """Send a corgo to the user.
+
         Callback fired with command /corgo
         """
-
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -357,11 +356,10 @@ class Telegram:
         logging.info("Corgo sent")
 
     def _botGoldencorgoCommand(self, update, context):
-        """
-        Function that narrates the legend of the golden corgo to the user
+        """Narrate the legend of the golden corgo to the user.
+
         Callback fired with command /goldencorgo
         """
-
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -389,13 +387,11 @@ class Telegram:
         logging.info("/goldencorgo called")
 
     def _botCheckCommand(self, update, context):
-        """
-        Function that checks if the golden corgo picture is still available by
-        sending it to the user and deleting it a shot while after
+        """Check if the golden corgo picture is still available.
+
         Callback fired with command /check
         Hidden command as it's not the in command list
         """
-
         chat_id = update.effective_chat.id
 
         if chat_id in self._admins:
@@ -444,11 +440,10 @@ class Telegram:
         logging.info("/check called")
 
     def _botStatsCommand(self, update, context):
-        """
-        Function that return stats about the bot
+        """Return stats about the bot.
+
         Callback fired with command  /stats
         """
-
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -477,12 +472,11 @@ class Telegram:
         logging.info("/stats called")
 
     def _botPingCommand(self, update, context):
-        """
-        Function that simply replies "PONG"
+        """Reply "PONG" to the user.
+
         Callback fired with command /ping for debug purposes
         Hidden command as it's not the in command list
         """
-
         message = "🏓 *PONG* 🏓"
         context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -491,6 +485,10 @@ class Telegram:
         )
 
     def _botBanCommand(self, update, context):
+        """Ban a chat from the bot.
+
+        Hidden command as it's not the in command list
+        """
         chat_id = update.effective_chat.id
         message = ""
 
@@ -536,14 +534,13 @@ class Telegram:
     #  must be set to "False"
 
     def _botTextMessageReceived(self, update, context):
-        """
-        Function that sends random dog barks
+        """Send a random dog bark when a text message is received.
+
         Callback fired whenever a text message is sent
         This is currently disabled in groups because it WILL lead to excessive
         spam. In order to enable it, the "group privacy" settings in
         @botfather must be set to "False"
         """
-
         if not update.message:
             return
 
@@ -609,12 +606,11 @@ class Telegram:
         )
 
     def _botError(self, update, context):
-        """
-        Function that logs in file and admin chat when an error occurs
+        """Log errors caused by updates.
+
         Callback fired whenever a text message is sent
         Callback fired by errors and handled by telegram module
         """
-
         logging.error(context.error)
 
         message = "*ERROR RAISED*"
@@ -658,6 +654,7 @@ class Telegram:
 
 
 def main():
+    """Start main function, setups logger and starts the bot."""
     # we log everything into the log file
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
@@ -668,7 +665,7 @@ def main():
 
     t = Telegram()
     t.start()
-    # after this, automatically calls the "load_posts" routine.
+    # this line will never be executed as the bot is idling
 
 
 if __name__ == "__main__":

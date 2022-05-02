@@ -1,3 +1,5 @@
+"""File containing the reddit interface to steal the images from reddit."""
+
 import os
 import praw
 import ujson
@@ -11,15 +13,11 @@ package_directory = os.path.dirname(os.path.abspath(__file__))
 
 
 class Reddit:
-    """
-    This class contains all the methods and variables needed to load the
-    urls of the pictures from reddit
-    """
+    """This class contains all the methods and variables needed to load the \
+    urls of the pictures from reddit."""
 
     def __init__(self):
-        """
-        initializes the Reddit handler
-        """
+        """Initialize the Reddit interface."""
         # clean the queue
         self._queue = []
         self._settings = {}
@@ -34,20 +32,21 @@ class Reddit:
     # Private methods
 
     def _loadSettings(self):
-        """
-        loads settings from the settings file.
-        unless specified, we use the default settings path
-        """
+        """Load settings from the settings file.
 
+        Unless differently specified during the instantiation, \
+        the default settings path is used.
+        """
         with open(self._settings_path) as json_file:
             # only keeps settings for Reddit, discarding others
             self._settings = ujson.load(json_file)["Reddit"]
 
     def _saveSettings(self):
-        """
-        saves settings into file
-        """
+        """Save settings in the settings file.
 
+        Unless differently specified during the instantiation, \
+        the default settings path is used.
+        """
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -61,10 +60,10 @@ class Reddit:
     # Public methods
 
     def login(self):
-        """
-        logs in Reddit
-        """
+        """Log into reddit.
 
+        User authentication details are loaded from settings file.
+        """
         self.reddit = praw.Reddit(
             client_id=self._settings["client_id"],
             client_secret=self._settings["client_secret"],
@@ -73,11 +72,14 @@ class Reddit:
 
         logging.info("Logged into Reddit")
 
-    def loadPosts(self):
-        """
-        loads all posts and returns the number of scraped urls
-        """
+    def loadPosts(self) -> int:
+        """Load all image posts from the needed subreddit.
 
+        The links are shuffled and kept into memory.
+
+        Returns:
+            int: number of loaded posts
+        """
         subreddit = self.reddit.subreddit("corgi+babycorgis")
         submissions = subreddit.top("week", limit=self._settings["post_limit"])
         # empties the queue
@@ -117,23 +119,22 @@ class Reddit:
         shuffle(self._queue)
         return len(self._queue)
 
-    def getImage(self):
-        """
-        returns the url of a photo
-        """
-
-        # if somehow we did not load anything, we reload some posts
+    def getImage(self) -> str:
+        """Return the url of the next image in the queue."""
+        # if somehow we did not load anything, we throw an exception
         # this should likely never happen, but might be triggered if the queue
         # has not been loaded yet
         if len(self._queue) == 0:
-            self.loadPosts()
+            raise RuntimeError("Queue is empty.")
 
         url = self._queue[0]  # first in rotation is the next url
         self._queue.append(self._queue.pop(0))  # list rotation
         return url
 
-    def removeImage(self, url):
-        self._queue.remove(url)
-        return
+    def removeImage(self, url: str):
+        """Remove an url from the queue.
 
-    # Setters and getter
+        Args:
+            url (str): url to be removed
+        """
+        self._queue.remove(url)
