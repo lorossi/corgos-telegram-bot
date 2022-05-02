@@ -55,7 +55,7 @@ class Reddit:
         # with the current settings dict
         old_settings["Reddit"].update(self._settings)
 
-        with open(self._settings_path, 'w') as outfile:
+        with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
     # Public methods
@@ -68,7 +68,7 @@ class Reddit:
         self.reddit = praw.Reddit(
             client_id=self._settings["client_id"],
             client_secret=self._settings["client_secret"],
-            user_agent=self._settings["user_agent"]
+            user_agent=self._settings["user_agent"],
         )
 
         logging.info("Logged into Reddit")
@@ -78,8 +78,8 @@ class Reddit:
         loads all posts and returns the number of scraped urls
         """
 
-        subreddit = self.reddit.subreddit('corgi+babycorgis')
-        submissions = subreddit.top('week', limit=self._settings["post_limit"])
+        subreddit = self.reddit.subreddit("corgi+babycorgis")
+        submissions = subreddit.top("week", limit=self._settings["post_limit"])
         # empties the queue
         self._queue = []
 
