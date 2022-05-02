@@ -11,6 +11,9 @@
         "admins": [
             "ADMIN-TELEGRAM-ID"
         ],
+        "banned": [
+            "BANNED-CHAT-IDS"
+        ],
         "corgos_sent": 0,
         "golden_corgos_found": 0,
         "golden_corgo_url": "GOLDEN-CORGO-URL",
