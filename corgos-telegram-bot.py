@@ -311,7 +311,8 @@ class Telegram:
 
         if chat_id in self._banned_chats:
             message = (
-                "*You have been banned by the bot.*" "\nThink on your action. Hecc."
+                "*You have been banned by the bot.*"
+                "\nThink about your past mistakes. \n\n_Hecc_."
             )
             context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
