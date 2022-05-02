@@ -27,6 +27,8 @@ Furthermore, there are 4 more *hidden* commands (as they are not listed):
 * */stop* will stop the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
 * */reset* will reload the script. This command can only be used by users whose id is in the *admins* settings in the config file.
 * */check* will check if the url pointing to the Golden Corgo is still valid. If the check is successful, the golden corgo will be sent and deleted shortly after.
+* */ban* will ban the user from using the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
+* */unban* will unban the user from using the bot. This command can only be used by users whose id is in the *admins* settings in the config file.
 
 The bot will also reply to private messages, although not in a really smart way. I mean, it's a corgi, not a human. Also it hates swearwords. Watch your language.
 
@@ -43,7 +45,7 @@ All the images are sourced from Reddit, namely from */r/corgi* and */r/babycorgi
 In order to be chosen, a post must have a minimum score, fixed in the settings file. I trust each moderator and their ability to remove any unsuitable image.
 
 The subreddits are scraped three times a week, at 2.20 AM (GMT), and every time 300 (as set in *settings.json* file) *weekly hottest* posts are loaded.
-Every post is then analyzed and any non pictures posts or posts with a low score are discarded.  Lastly, the list of URL is randomized.
+Every post is then analysed and any non pictures posts or posts with a low score are discarded.  Lastly, the list of URL is randomized.
 
 Every time a picture is sent the list is rotated, so it's impossible that the same picture is sent twice (or more!) in a row.
 
