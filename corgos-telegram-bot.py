@@ -18,8 +18,13 @@ from reddit import Reddit
 from random import choice, randint
 from datetime import datetime, time
 from telegram import ParseMode, ChatAction
-from telegram.ext import Updater, CommandHandler, CallbackContext, \
-    MessageHandler, Filters
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    CallbackContext,
+    MessageHandler,
+    Filters,
+)
 
 
 class Telegram:
@@ -54,7 +59,7 @@ class Telegram:
         # load time expressed in minutes after midnight (GMT time)
         self._load_time = time(
             minute=self._settings["load_time"] % 60,
-            hour=int(self._settings["load_time"] / 60)
+            hour=int(self._settings["load_time"] / 60),
         )
 
     def _saveSettings(self):
@@ -69,7 +74,7 @@ class Telegram:
         # with the current settings dict
         old_settings["Telegram"].update(self._settings)
 
-        with open(self._settings_path, 'w') as outfile:
+        with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
     def _updateCorgosSent(self):
@@ -81,6 +86,22 @@ class Telegram:
         self._settings["corgos_sent"] = self._corgos_sent
         self._saveSettings()
 
+    def _addToBanned(self, chat_id):
+        if len(self._banned_chats) > 0:
+            already_banned = self._banned_chats
+            already_banned.append(chat_id)
+            self._settings["banned"] = list(set(self._settings["banned"]))
+        else:
+            self._banned_chats = [chat_id]
+
+        self._saveSettings()
+
+    def _removeFromBanned(self, chat_id):
+        if chat_id in self._settings["banned"]:
+            self._settings["banned"].remove(chat_id)
+
+        self._saveSettings()
+
     # Public methods
 
     def start(self):
@@ -88,10 +109,7 @@ class Telegram:
         starts the bot
         """
 
-        self._updater = Updater(
-            self._settings["token"],
-            use_context=True
-        )
+        self._updater = Updater(self._settings["token"], use_context=True)
 
         self._dispatcher = self._updater.dispatcher
         self._jobqueue = self._updater.job_queue
@@ -102,38 +120,34 @@ class Telegram:
         self._jobqueue.run_once(self._loadPosts, when=0, name="load_posts")
 
         # load fresh corgos on set days
-        self._jobqueue.run_daily(self._loadPosts, days=self._load_days,
-                                 time=self._load_time, name="load_posts")
+        self._jobqueue.run_daily(
+            self._loadPosts,
+            days=self._load_days,
+            time=self._load_time,
+            name="load_posts",
+        )
 
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
         self._dispatcher.add_error_handler(self._botError)
 
         # these are the handlers for all the commands
-        self._dispatcher.add_handler(
-            CommandHandler('start', self._botStartCommand)
-        )
-        self._dispatcher.add_handler(
-            CommandHandler('stop', self._botStopCommand)
-        )
-        self._dispatcher.add_handler(
-            CommandHandler('reset', self._botResetCommand)
-        )
-        self._dispatcher.add_handler(
-            CommandHandler('corgo', self._botCorgoCommand)
-        )
+        self._dispatcher.add_handler(CommandHandler("start", self._botStartCommand))
+        self._dispatcher.add_handler(CommandHandler("stop", self._botStopCommand))
+        self._dispatcher.add_handler(CommandHandler("reset", self._botResetCommand))
+        self._dispatcher.add_handler(CommandHandler("corgo", self._botCorgoCommand))
 
         self._dispatcher.add_handler(
-            CommandHandler('goldencorgo', self._botGoldencorgoCommand)
+            CommandHandler("goldencorgo", self._botGoldencorgoCommand)
+        )
+        self._dispatcher.add_handler(CommandHandler("check", self._botCheckCommand))
+        self._dispatcher.add_handler(CommandHandler("stats", self._botStatsCommand))
+        self._dispatcher.add_handler(CommandHandler("ping", self._botPingCommand))
+        self._dispatcher.add_handler(
+            CommandHandler("ban", self._botBanCommand, pass_args=True)
         )
         self._dispatcher.add_handler(
-            CommandHandler('check', self._botCheckCommand)
-        )
-        self._dispatcher.add_handler(
-            CommandHandler('stats', self._botStatsCommand)
-        )
-        self._dispatcher.add_handler(
-            CommandHandler('ping', self._botPingCommand)
+            CommandHandler("unban", self._botUnbanCommand, pass_args=True)
         )
 
         # catches every message and replies with some gibberish
@@ -184,6 +198,15 @@ class Telegram:
     def _golden_corgo_url(self):
         return self._settings["golden_corgo_url"]
 
+    @property
+    def _banned_chats(self):
+        return self._settings["banned"]
+
+    @_banned_chats.setter
+    def _banned_chats(self, chats):
+        self._settings["banned"] = list(set(chats))
+        self._saveSettings()
+
     # Callbacks
 
     def _botStarted(self, context: CallbackContext):
@@ -193,8 +216,9 @@ class Telegram:
         """
         message = "*Bot started*"
         for chat_id in self._admins:
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
     def _loadPosts(self, context: CallbackContext):
         """
@@ -205,15 +229,17 @@ class Telegram:
 
         for chat_id in self._admins:
             message = "*Loading posts...*"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
         posts = self._reddit.loadPosts()
         message = f"*{posts} posts loaded!*"
 
         for chat_id in self._admins:
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
         logging.info("Posts loaded")
 
@@ -224,8 +250,9 @@ class Telegram:
         """
         chat_id = update.effective_chat.id
         message = "_Press /corgo to get a corgo!_"
-        context.bot.send_message(chat_id=chat_id, text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
 
         logging.info("/start called")
 
@@ -240,8 +267,9 @@ class Telegram:
 
         if chat_id in self._admins:
             message = "_Bot stopped_"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
             # save settings just in case
             self._saveSettings()
             self._updater.stop()
@@ -250,8 +278,9 @@ class Telegram:
 
         else:
             message = "*This command is for moderators only*"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
     def _botResetCommand(self, update, context):
         """
@@ -264,12 +293,13 @@ class Telegram:
 
         if chat_id in self._admins:
             message = "_Resetting..._"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
             logging.warning(f"Reset by chat id {chat_id}")
             # System command to reload the python script
-            os.execl(sys.executable, sys.executable, * sys.argv)
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
     def _botCorgoCommand(self, update, context):
         """
@@ -279,6 +309,15 @@ class Telegram:
 
         chat_id = update.effective_chat.id
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+
+        if chat_id in self._banned_chats:
+            message = (
+                "*You have been banned by the bot.*" "\nThink on your action. Hecc."
+            )
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
         bot_username = self._updater.bot.get_me()["username"]
         caption = f"@{bot_username}"
@@ -297,14 +336,12 @@ class Telegram:
             # managed to crash both the script and the RaspberryPi
             try:
                 url = self._reddit.getImage()
-                context.bot.send_photo(
-                    chat_id=chat_id, photo=url, caption=caption)
+                context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
                 self._corgos_sent += 1
             except Exception as e:
-                logging.error(
-                    f"Error while sending photo. Url {url} Error {e}"
-                )
-                self._reddit.removeImage(url)
+                logging.error(f"Error while sending photo. Url {url} Error {e}")
+                if "flood" not in e.lower():
+                    self._reddit.removeImage(url)
                 raise Exception(f"Url {url} is not valid. Error {e}")
                 # at this point, an exception is raised and the error
                 #   function is called. The user gets notified and
@@ -313,8 +350,9 @@ class Telegram:
 
         self._corgos_sent += 1
         message = "_Press /corgo for another corgo!_"
-        context.bot.send_message(chat_id=chat_id, text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
 
         logging.info("Corgo sent")
 
@@ -325,10 +363,7 @@ class Telegram:
         """
 
         chat_id = update.effective_chat.id
-        context.bot.send_chat_action(
-            chat_id=chat_id,
-            action=ChatAction.TYPING
-        )
+        context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
         message = (
             f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
@@ -338,16 +373,18 @@ class Telegram:
             f"roaming this bot..._"
         )
 
-        context.bot.send_message(chat_id=chat_id, text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
 
         message = (
             f"*Maybe you too will be blessed by this elusive good boi!*\n"
             f"@{self._bot_username}"
         )
 
-        context.bot.send_message(chat_id=chat_id, text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
 
         logging.info("/goldencorgo called")
 
@@ -372,18 +409,21 @@ class Telegram:
             caption = f"@{self._bot_username}"
 
             try:
-                m = context.bot.send_photo(chat_id=chat_id,
-                                           photo=small_url, caption=caption)
+                m = context.bot.send_photo(
+                    chat_id=chat_id, photo=small_url, caption=caption
+                )
                 to_delete = m["message_id"]
 
                 message = "*The golden corgo URL is still working!*"
-                context.bot.send_message(chat_id=chat_id, text=message,
-                                         parse_mode=ParseMode.MARKDOWN)
+                context.bot.send_message(
+                    chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+                )
 
             except Exception as e:
                 message = "*Golden Corgo picture not found!*\n"
-                context.bot.send_message(chat_id=chat_id, text=message,
-                                         parse_mode=ParseMode.MARKDOWN)
+                context.bot.send_message(
+                    chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+                )
                 log = (
                     f"Error while sending checking golden corgo. "
                     f"Url {url} Error {e}"
@@ -397,8 +437,9 @@ class Telegram:
 
         else:
             message = "*This command is for moderators only*"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
         logging.info("/check called")
 
@@ -427,9 +468,11 @@ class Telegram:
             f"*{self._golden_corgos_found}* golden corgos were found!"
         )
 
-        context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
         logging.info("/stats called")
 
@@ -441,9 +484,49 @@ class Telegram:
         """
 
         message = "🏓 *PONG* 🏓"
-        context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=message,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    def _botBanCommand(self, update, context):
+        chat_id = update.effective_chat.id
+        message = ""
+
+        if chat_id in self._admins:
+            for arg in context.args:
+                self._addToBanned(int(arg))
+
+            if len(self._banned_chats) > 0:
+                message = "_Ban list_: " + ", ".join(str(b) for b in self._banned_chats)
+            else:
+                message = "_Ban list is empty_"
+
+        else:
+            message = "*This command is for moderators only*"
+
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
+
+    def _botUnbanCommand(self, update, context):
+        chat_id = update.effective_chat.id
+        message = ""
+
+        if chat_id in self._admins:
+            for arg in context.args:
+                self._removeFromBanned(int(arg))
+
+            message = "*Chats removed from ban list*: " + ", ".join(
+                str(a) for a in context.args
+            )
+        else:
+            message = "*This command is for moderators only*"
+
+        context.bot.send_message(
+            chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+        )
 
     # Function that sends random dog barks
     # Callback fired whenever a text message is sent
@@ -470,36 +553,45 @@ class Telegram:
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
         message_text = update.message.text.upper()
-        barks = ['ARF ', 'WOFF ', 'BORK ', 'RUFF ']
-        swearwords = ['HECK', 'GOSH', 'DARN', 'SHOOT', 'FRICK', 'FLIP']
-        marks = ['!', '?', '!?', '?!']
+        barks = ["ARF ", "WOFF ", "BORK ", "RUFF "]
+        swearwords = ["HECK", "GOSH", "DARN", "SHOOT", "FRICK", "FLIP"]
+        marks = ["!", "?", "!?", "?!"]
 
         # if the message is a "swear word", we want to notify the user that we
         #   don't tolerate it here
         for s in swearwords:
             if s in message_text:
                 message = "_NO H*CKING BAD LANGUAGE HERE!_"
-                context.bot.send_message(chat_id=chat_id, text=message,
-                                         reply_to_message_id=message_id,
-                                         parse_mode=ParseMode.MARKDOWN)
+                context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    reply_to_message_id=message_id,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
                 return
 
         # if the message contains a "bark", we want to reply accordingly
         for b in barks:
             if b.strip() in message_text:
                 message = f"_{b.strip()}!_"
-                context.bot.send_message(chat_id=chat_id, text=message,
-                                         reply_to_message_id=message_id,
-                                         parse_mode=ParseMode.MARKDOWN)
+                context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    reply_to_message_id=message_id,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
                 return
 
         # if the message contains the word "corgo", we want to tell the user
         #   to use the correct command
         if "CORGO" in message_text.upper():
             message = "_Press /corgo to get a corgo!_"
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     reply_to_message_id=message_id,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                reply_to_message_id=message_id,
+                parse_mode=ParseMode.MARKDOWN,
+            )
             return
 
         # we want to generate some gibberish answer to every message
@@ -509,9 +601,12 @@ class Telegram:
         bark = bark.rstrip()  # remove the last space (if any)
         mark = choice(marks)
         message = f"_{bark}{mark}_"
-        context.bot.send_message(chat_id=chat_id, text=message,
-                                 reply_to_message_id=message_id,
-                                 parse_mode=ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            reply_to_message_id=message_id,
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
     def _botError(self, update, context):
         """
@@ -526,12 +621,14 @@ class Telegram:
         # admin message
         for chat_id in self._admins:
             # HECC
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     disable_web_page_preview=True,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                disable_web_page_preview=True,
+                parse_mode=ParseMode.MARKDOWN,
+            )
 
-        error_string = str(context.error).replace(
-            "_", "\\_")  # MARKDOWN escape
+        error_string = str(context.error).replace("_", "\\_")  # MARKDOWN escape
         time_string = datetime.now().isoformat()
 
         message = (
@@ -549,12 +646,12 @@ class Telegram:
             #   an update
             chat_id = update.effective_chat.id
             message = (
-                "_Oh h*ck, the bot is doing a splish splosh_ \n"
-                "*Please try again*"
+                "_Oh h*ck, the bot is doing a splish splosh_ \n" "*Please try again*"
             )
 
-            context.bot.send_message(chat_id=chat_id, text=message,
-                                     parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+            )
 
         # logs to file
         logging.error(f"Update {update} caused error {context.error}")
@@ -565,8 +662,8 @@ def main():
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(message)s',
-        filemode="w"
+        format="%(asctime)s %(levelname)s %(message)s",
+        filemode="w",
     )
 
     t = Telegram()
