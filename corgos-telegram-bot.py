@@ -340,7 +340,7 @@ class Telegram:
                 self._corgos_sent += 1
             except Exception as e:
                 logging.error(f"Error while sending photo. Url {url} Error {e}")
-                if "flood" not in e.lower():
+                if "flood" not in str(e).lower():
                     self._reddit.removeImage(url)
                 raise Exception(f"Url {url} is not valid. Error {e}")
                 # at this point, an exception is raised and the error
