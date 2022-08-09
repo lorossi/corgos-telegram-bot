@@ -1,4 +1,4 @@
-praw == 7.4.0
-python_telegram_bot == 13.7
-requests == 2.26.0
-ujson == 5.2.0
+asyncpraw==7.5.0
+python_telegram_bot==20.0a2
+telegram==0.0.1
+ujson==5.4.0
