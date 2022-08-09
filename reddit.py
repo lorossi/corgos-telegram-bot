@@ -1,27 +1,23 @@
 """File containing the reddit interface to steal the images from reddit."""
 
-import os
-import praw
 import ujson
 import logging
+import asyncpraw
 
 from random import shuffle
 from urllib.request import urlopen
-
-
-package_directory = os.path.dirname(os.path.abspath(__file__))
 
 
 class Reddit:
     """This class contains all the methods and variables needed to load the \
     urls of the pictures from reddit."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the Reddit interface."""
         # clean the queue
         self._queue = []
         self._settings = {}
-        self._settings_path = package_directory + "/settings.json"
+        self._settings_path = "settings.json"
         # whenever we scrape a link, we want to be sure it's just an image
         # and not, for instance, a gif or a video. So this is a list of allowed
         # image formats
@@ -31,7 +27,7 @@ class Reddit:
 
     # Private methods
 
-    def _loadSettings(self):
+    def _loadSettings(self) -> None:
         """Load settings from the settings file.
 
         Unless differently specified during the instantiation, \
@@ -41,7 +37,7 @@ class Reddit:
             # only keeps settings for Reddit, discarding others
             self._settings = ujson.load(json_file)["Reddit"]
 
-    def _saveSettings(self):
+    def _saveSettings(self) -> None:
         """Save settings in the settings file.
 
         Unless differently specified during the instantiation, \
@@ -59,12 +55,12 @@ class Reddit:
 
     # Public methods
 
-    def login(self):
+    def login(self) -> None:
         """Log into reddit.
 
         User authentication details are loaded from settings file.
         """
-        self.reddit = praw.Reddit(
+        self.reddit = asyncpraw.Reddit(
             client_id=self._settings["client_id"],
             client_secret=self._settings["client_secret"],
             user_agent=self._settings["user_agent"],
@@ -72,7 +68,7 @@ class Reddit:
 
         logging.info("Logged into Reddit")
 
-    def loadPosts(self) -> int:
+    async def loadPosts(self) -> int:
         """Load all image posts from the needed subreddit.
 
         The links are shuffled and kept into memory.
@@ -80,12 +76,12 @@ class Reddit:
         Returns:
             int: number of loaded posts
         """
-        subreddit = self.reddit.subreddit("corgi+babycorgis")
+        subreddit = await self.reddit.subreddit("corgi+babycorgis")
         submissions = subreddit.top("week", limit=self._settings["post_limit"])
         # empties the queue
         self._queue = []
 
-        for s in submissions:
+        async for s in submissions:
 
             # skips stickied and selftexts, we don't need those
             if s.selftext or s.stickied:
@@ -131,7 +127,7 @@ class Reddit:
         self._queue.append(self._queue.pop(0))  # list rotation
         return url
 
-    def removeImage(self, url: str):
+    def removeImage(self, url: str) -> None:
         """Remove an url from the queue.
 
         Args:
