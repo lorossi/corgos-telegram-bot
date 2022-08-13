@@ -169,8 +169,10 @@ class Telegram:
         return self._settings["admins"]
 
     @property
-    def _escaped_bot_username(self) -> str:
-        return self._bot_username.replace("_", "\_")
+    async def _bot_username(self) -> str:
+        # load username
+        me = await self._application.bot.get_me()
+        return me.username
 
     @property
     def _corgos_sent(self) -> int:
@@ -219,10 +221,6 @@ class Telegram:
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
-
-        # load username
-        me = await self._application.bot.get_me()
-        self._bot_username = me.username
 
     async def _loadPosts(self, context: CallbackContext) -> None:
         """Load posts from Reddit.
@@ -323,7 +321,8 @@ class Telegram:
             )
             return
 
-        caption = f"@{self._bot_username}"
+        username = await self._bot_username
+        caption = f"@{username}"
 
         if randint(0, 1000) == 0:
             # send a golden corgo
@@ -384,9 +383,11 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
+        username = await self._bot_username
+
         message = (
             f"*Maybe you too will be blessed by this elusive good boi!*\n"
-            f"@{self._escaped_bot_username}"
+            f"@{username}"
         )
 
         await context.bot.send_message(
