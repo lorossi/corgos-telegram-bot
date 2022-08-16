@@ -65,7 +65,7 @@ If you want to run this bot yourself on your machine, you have to follow a few s
 2. Register to Reddit Api
 3. Create a Telegram bot using \@BotFather on Telegram and set the command list as it's provided in the *commandlist.md* file
 4. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
-5. Fill the *settings.json* with the data you have gathered so far (Reddit access details, Telegram token)
+5. Create a virtual environment via the command `python3 -m venv venv` and activate it via `source venv/bin/activate`
 6. Install all the requirements via the command `pip3 install -r requirements.txt`
 7. Finally, run the script with `python3 corgos_bot.py`. The script will log everything in a file (named *logging.log*) in the same folder.
 
