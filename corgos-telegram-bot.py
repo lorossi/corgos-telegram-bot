@@ -14,11 +14,15 @@ License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 import os
 import sys
 import ujson
+import asyncio
 import logging
-import traceback, tracemalloc
+import traceback
+import tracemalloc
 
-from reddit import Reddit
+from reddit import Reddit, EmptyQueueException
 
+from time import sleep
+from contextvars import Context
 from random import choice, randint
 from datetime import datetime, time
 from telegram import Update, constants
@@ -43,6 +47,8 @@ class Telegram:
         self._loadSettings()
         # create a Reddit handler
         self._reddit = Reddit()
+        # preload the username for faster access
+        self._preloaded_username = None
 
     # Private methods
 
@@ -108,6 +114,17 @@ class Telegram:
         # save to file
         self._saveSettings()
 
+    def _escapeMarkdown(self, text: str) -> str:
+        """Escape markdown characters in a text.
+
+        Args:
+            text (str): text to escape
+        """
+        to_escape = ["_", "*", "[", "]", "(", ")"]
+        for char in to_escape:
+            text = text.replace(char, f"\\{char}")
+        return text
+
     # Public methods
 
     def start(self) -> None:
@@ -170,9 +187,12 @@ class Telegram:
 
     @property
     async def _bot_username(self) -> str:
-        # load username
-        me = await self._application.bot.get_me()
-        return me.username
+        if not self._preloaded_username:
+            # load username
+            me = await self._application.bot.get_me()
+            self._preloaded_username = "@" + me.username
+
+        return self._preloaded_username
 
     @property
     def _corgos_sent(self) -> int:
@@ -227,23 +247,33 @@ class Telegram:
 
         Callback fired at startup and at night in set days from JobQueue
         """
-        logging.info("Loading posts")
+        logging.info("Loading posts asynchronously.")
 
+        message = "_Posts are now being loaded..._"
         for chat_id in self._admins:
-            message = "*Loading posts...*"
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode=constants.ParseMode.MARKDOWN,
+            )
+
+        def posts_loaded(async_context: Context) -> None:
+            logging.info(f"{async_context.result()} posts loaded")
+            asyncio.create_task(self._postsLoaded(context))
+
+        task = asyncio.create_task(self._reddit.loadPosts())
+        task.add_done_callback(posts_loaded)
+
+    async def _postsLoaded(self, context: CallbackContext):
+        """Send a message to admins when the posts are loaded.
+
+        Callback fired when the posts are loaded from Reddit
+        """
+        message = f"_...{self._reddit.queueSize} posts loaded._"
+        for chat_id in self._admins:
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
-
-        posts = await self._reddit.loadPosts()
-        message = f"*{posts} posts loaded!*"
-
-        for chat_id in self._admins:
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
-
-        logging.info("Posts loaded")
 
     async def _botStartCommand(self, update: Update, context: CallbackContext) -> None:
         """Greet the user when /start is called.
@@ -273,7 +303,7 @@ class Telegram:
             )
             # save settings just in case
             self._saveSettings()
-            self._application.stop()
+            await self._application.stop()
             logging.warning(f"Stopped by chat id {chat_id}")
             os._exit(0)
 
@@ -321,8 +351,7 @@ class Telegram:
             )
             return
 
-        username = await self._bot_username
-        caption = f"@{username}"
+        caption = await self._bot_username
 
         if randint(0, 1000) == 0:
             # send a golden corgo
@@ -336,20 +365,29 @@ class Telegram:
             #   available unless trying to send it.
             # It shouldn't happen often, but the method I used previously
             # managed to crash both the script and the RaspberryPi
-            try:
-                url = self._reddit.getImage()
-                await context.bot.send_photo(
-                    chat_id=chat_id, photo=url, caption=caption
-                )
-            except Exception as e:
-                logging.error(f"Error while sending photo. Url {url} Error {e}")
-                if "flood" not in str(e).lower():
-                    self._reddit.removeImage(url)
-                raise Exception(f"Url {url} is not valid. Error {e}")
-                # at this point, an exception is raised and the error
-                #   function is called. The user gets notified and
-                #   prompted to try again.
-                # The image gets then remove from the queue
+            while True:
+                try:
+                    url = self._reddit.getImage()
+                except EmptyQueueException:
+                    logging.error("Error while sending photo. Empty queue.")
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="The bot is fetching some new corgos. "
+                        "_Please wait a second and try again!_",
+                        parse_mode=constants.ParseMode.MARKDOWN,
+                    )
+                    return
+
+                try:
+                    await context.bot.send_photo(
+                        chat_id=chat_id, photo=url, caption=caption
+                    )
+                    break
+                except Exception as e:
+                    logging.error(
+                        f"Error while sending photo {url}. Error {e}. Retrying in 0.5 seconds."
+                    )
+                    sleep(0.5)
 
         self._corgos_sent += 1
         message = "_Press /corgo for another corgo!_"
@@ -384,10 +422,9 @@ class Telegram:
         )
 
         username = await self._bot_username
-
         message = (
             f"*Maybe you too will be blessed by this elusive good boi!*\n"
-            f"@{username}"
+            f"{self._escapeMarkdown(username)}"
         )
 
         await context.bot.send_message(
@@ -412,7 +449,7 @@ class Telegram:
             # image sizes by editing its url a bit
             small_url = url.replace(".jpg", "s.jpg")
 
-            caption = f"@{self._bot_username}"
+            caption = await self._bot_username
 
             try:
                 m = await context.bot.send_photo(
