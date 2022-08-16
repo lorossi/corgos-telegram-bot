@@ -8,6 +8,12 @@ from random import shuffle
 from urllib.request import urlopen
 
 
+class EmptyQueueException(Exception):
+    """Exception raised when the queue is empty."""
+
+    pass
+
+
 class Reddit:
     """This class contains all the methods and variables needed to load the \
     urls of the pictures from reddit."""
@@ -21,7 +27,7 @@ class Reddit:
         # whenever we scrape a link, we want to be sure it's just an image
         # and not, for instance, a gif or a video. So this is a list of allowed
         # image formats
-        self.image_formats = ("image/png", "image/jpeg")
+        self._image_formats = ("image/png", "image/jpeg")
         # load settings
         self._loadSettings()
 
@@ -53,6 +59,40 @@ class Reddit:
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
 
+    def _checkSingleImage(self, url: str) -> bool:
+        """Check if a url is a valid image.
+
+        Args:
+            url (str): Reddit post url
+
+        Returns:
+            bool
+        """
+        try:
+            # log the content type in order to make sure it's an image
+            content_type = urlopen(url).info()["content-type"]
+        except Exception as e:
+            # if it fails, it's because the image has been removed
+            logging.error(f"Cannot open url {url}, error {e}")
+            return False
+
+        # if it's not an image, we skip the current url
+        if content_type not in self._image_formats:
+            return False
+
+        return True
+
+    def _scrapeGallery(self, media_metadata: dict) -> list[str]:
+        """Scrape a gallery of images.
+
+        Args:
+            url (str): url of the gallery
+        """
+        urls = []
+        for media in media_metadata.items():
+            urls.append(media[1]["s"]["u"])
+        return urls
+
     # Public methods
 
     def login(self) -> None:
@@ -60,7 +100,7 @@ class Reddit:
 
         User authentication details are loaded from settings file.
         """
-        self.reddit = asyncpraw.Reddit(
+        self._reddit = asyncpraw.Reddit(
             client_id=self._settings["client_id"],
             client_secret=self._settings["client_secret"],
             user_agent=self._settings["user_agent"],
@@ -76,12 +116,11 @@ class Reddit:
         Returns:
             int: number of loaded posts
         """
-        subreddit = await self.reddit.subreddit("corgi+babycorgis")
-        submissions = subreddit.top("week", limit=self._settings["post_limit"])
         # empties the queue
         self._queue = []
 
-        async for s in submissions:
+        subreddits = await self._reddit.subreddit("corgi+babycorgis")
+        async for s in subreddits.top("week", limit=self._settings["post_limit"]):
 
             # skips stickied and selftexts, we don't need those
             if s.selftext or s.stickied:
@@ -95,21 +134,17 @@ class Reddit:
             if "v.redd.it" in s.url or ".gif" in s.url:
                 continue
 
+            await s.load()
+
             # try to open the image
-            try:
-                # log the content type in order to make sure it's an image
-                content_type = urlopen(s.url).info()["content-type"]
-            except Exception as e:
-                # if it fails, it's because the image has been removed
-                logging.error(f"Cannot open url {s.url}, error {e}")
-                continue
+            if hasattr(s, "is_gallery"):
+                scraped_urls = self._scrapeGallery(s.media_metadata)
+            else:
+                scraped_urls = [s.url]
 
-            # if it's not an image, we skip the current url
-            if content_type not in self.image_formats:
-                continue
-
-            # appends to queue list
-            self._queue.append(s.url)
+            for s in scraped_urls:
+                if self._checkSingleImage(s):
+                    self._queue.append(s)
 
         # shuffles the list to make it more random
         shuffle(self._queue)
@@ -121,7 +156,7 @@ class Reddit:
         # this should likely never happen, but might be triggered if the queue
         # has not been loaded yet
         if len(self._queue) == 0:
-            raise RuntimeError("Queue is empty.")
+            raise EmptyQueueException("Queue is empty.")
 
         url = self._queue[0]  # first in rotation is the next url
         self._queue.append(self._queue.pop(0))  # list rotation
@@ -134,3 +169,8 @@ class Reddit:
             url (str): url to be removed
         """
         self._queue.remove(url)
+
+    @property
+    def queueSize(self) -> int:
+        """Return the size of the queue."""
+        return len(self._queue)
