@@ -125,11 +125,6 @@ class Telegram:
             text = text.replace(char, f"\\{char}")
         return text
 
-    async def _preloadUsername(self) -> None:
-        # load the bot username
-        me = await self._application.bot.get_me()
-        self._bot_username = "@" + me.username
-
     # Public methods
 
     def start(self) -> None:
@@ -142,6 +137,8 @@ class Telegram:
         self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")
         # load posts for the first time
         self._jobqueue.run_once(self._loadPosts, when=0, name="load_posts")
+        # preload the username for faster access
+        self._jobqueue.run_once(self._preloadUsername, when=0, name="preload_username")
 
         # load fresh corgos on set days
         self._jobqueue.run_daily(
@@ -179,9 +176,6 @@ class Telegram:
 
         # Log in into reddit
         self._reddit.login()
-
-        # preload the bot username
-        asyncio.ensure_future(self._preloadUsername())
 
         # blocking instructions
         self._application.run_polling()
@@ -262,6 +256,11 @@ class Telegram:
 
         task = asyncio.create_task(self._reddit.loadPosts())
         task.add_done_callback(posts_loaded)
+
+    async def _preloadUsername(self, context: CallbackContext) -> None:
+        # load the bot username
+        me = await self._application.bot.get_me()
+        self._bot_username = "@" + me.username
 
     async def _postsLoaded(self, context: CallbackContext):
         """Send a message to admins when the posts are loaded.
