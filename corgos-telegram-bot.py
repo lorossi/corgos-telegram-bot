@@ -48,7 +48,7 @@ class Telegram:
         # create a Reddit handler
         self._reddit = Reddit()
         # preload the username for faster access
-        self._preloaded_username = None
+        self._bot_username = None
 
     # Private methods
 
@@ -125,6 +125,11 @@ class Telegram:
             text = text.replace(char, f"\\{char}")
         return text
 
+    async def _preloadUsername(self) -> None:
+        # load the bot username
+        me = await self._application.bot.get_me()
+        self._bot_username = "@" + me.username
+
     # Public methods
 
     def start(self) -> None:
@@ -175,6 +180,9 @@ class Telegram:
         # Log in into reddit
         self._reddit.login()
 
+        # preload the bot username
+        asyncio.ensure_future(self._preloadUsername())
+
         # blocking instructions
         self._application.run_polling()
         logging.info("Bot started")
@@ -184,15 +192,6 @@ class Telegram:
     @property
     def _admins(self) -> list[int]:
         return self._settings["admins"]
-
-    @property
-    async def _bot_username(self) -> str:
-        if not self._preloaded_username:
-            # load username
-            me = await self._application.bot.get_me()
-            self._preloaded_username = "@" + me.username
-
-        return self._preloaded_username
 
     @property
     def _corgos_sent(self) -> int:
@@ -351,7 +350,7 @@ class Telegram:
             )
             return
 
-        caption = await self._bot_username
+        caption = self._bot_username
 
         if randint(0, 1000) == 0:
             # send a golden corgo
@@ -424,10 +423,9 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-        username = await self._bot_username
+        username = self._escapeMarkdown(self._bot_username)
         message = (
-            f"*Maybe you too will be blessed by this elusive good boi!*\n"
-            f"{self._escapeMarkdown(username)}"
+            f"*Maybe you too will be blessed by this elusive good boi!*\n" f"{username}"
         )
 
         await context.bot.send_message(
@@ -452,7 +450,7 @@ class Telegram:
             # image sizes by editing its url a bit
             small_url = url.replace(".jpg", "s.jpg")
 
-            caption = await self._bot_username
+            caption = self._bot_username
 
             try:
                 m = await context.bot.send_photo(
