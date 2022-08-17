@@ -359,16 +359,13 @@ class Telegram:
             await context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
             self._golden_corgos_found += 1
         else:
-            # not the best way of catching errors
-            # I might find a better way of checking urls but I fear it might
-            #   be too slow. There's no real way to know if an image is still
-            #   available unless trying to send it.
-            # It shouldn't happen often, but the method I used previously
-            # managed to crash both the script and the RaspberryPi
+            # send a normal corgo
             while True:
                 try:
+                    # try to get an url from the reddit instance
                     url = self._reddit.getImage()
                 except EmptyQueueException:
+                    # the queue is empty, tell the user to try again later
                     logging.error("Error while sending photo. Empty queue.")
                     await context.bot.send_message(
                         chat_id=chat_id,
@@ -379,17 +376,23 @@ class Telegram:
                     return
 
                 try:
+                    # try to send the photo
                     await context.bot.send_photo(
                         chat_id=chat_id, photo=url, caption=caption
                     )
                     break
                 except Exception as e:
+                    # the photo could not be sent, try again in a little while
+                    # photos that cannot be sent should be removed from the queue, but this approach
+                    # works anyway
                     logging.error(
                         f"Error while sending photo {url}. Error {e}. Retrying in 0.5 seconds."
                     )
                     sleep(0.5)
-
+        # increase the corgo counter
         self._corgos_sent += 1
+
+        # send another message to the user
         message = "_Press /corgo for another corgo!_"
         await context.bot.send_message(
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN

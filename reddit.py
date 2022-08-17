@@ -4,7 +4,7 @@ import ujson
 import logging
 import asyncpraw
 
-from random import shuffle
+from random import randint, shuffle
 from urllib.request import urlopen
 
 
@@ -142,9 +142,9 @@ class Reddit:
             else:
                 scraped_urls = [s.url]
 
-            for s in scraped_urls:
-                if self._checkSingleImage(s):
-                    self._queue.append(s)
+            for url in scraped_urls:
+                if self._checkSingleImage(url):
+                    self._queue.insert(randint(0, len(self._queue)), url)
 
         # shuffles the list to make it more random
         shuffle(self._queue)
