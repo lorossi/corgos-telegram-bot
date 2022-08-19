@@ -117,37 +117,44 @@ class Reddit:
             int: number of loaded posts
         """
         # empties the queue
-        self._queue = []
+        new_queue = []
 
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
-        async for s in subreddits.top("week", limit=self._settings["post_limit"]):
+        async for submission in subreddits.top(
+            "week", limit=self._settings["post_limit"]
+        ):
 
-            # skips stickied and selftexts, we don't need those
-            if s.selftext or s.stickied:
+            # skip stickied and selftexts, we don't need those
+            if submission.selftext or submission.stickied:
                 continue
 
-            # skips posts that have a low score
-            if s.score < self._settings["min_score"]:
+            # skip posts that have a low score
+            if submission.score < self._settings["min_score"]:
                 continue
 
-            # filters gifs
-            if "v.redd.it" in s.url or ".gif" in s.url:
+            # filter gifs
+            if "v.redd.it" in submission.url or ".gif" in submission.url:
                 continue
 
-            await s.load()
+            await submission.load()
 
             # try to open the image
-            if hasattr(s, "is_gallery"):
-                scraped_urls = self._scrapeGallery(s.media_metadata)
+            if hasattr(submission, "is_gallery"):
+                scraped_urls = self._scrapeGallery(submission.media_metadata)
             else:
-                scraped_urls = [s.url]
+                scraped_urls = [submission.url]
 
+            # check the url for each image
             for url in scraped_urls:
+                # if it's a valid image, we add it to the queue
                 if self._checkSingleImage(url):
-                    self._queue.insert(randint(0, len(self._queue)), url)
+                    new_queue.append(url)
 
         # shuffles the list to make it more random
-        shuffle(self._queue)
+        shuffle(new_queue)
+
+        # copy the new queue to the old one
+        self._queue = [url for url in new_queue]
         return len(self._queue)
 
     def getImage(self) -> str:
