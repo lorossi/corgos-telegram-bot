@@ -251,7 +251,7 @@ class Telegram:
             )
 
         def posts_loaded(async_context: Context) -> None:
-            logging.info(f"{async_context.result()} posts loaded")
+            logging.info(f"{async_context.result()} images loaded")
             asyncio.create_task(self._postsLoaded(context))
 
         task = asyncio.create_task(self._reddit.loadPosts())
@@ -262,12 +262,12 @@ class Telegram:
         me = await self._application.bot.get_me()
         self._bot_username = "@" + me.username
 
-    async def _postsLoaded(self, context: CallbackContext):
+    async def _postsLoaded(self, context: CallbackContext) -> None:
         """Send a message to admins when the posts are loaded.
 
         Callback fired when the posts are loaded from Reddit
         """
-        message = f"_...{self._reddit.queueSize} posts loaded._"
+        message = f"_...{self._reddit.queueSize} corgos loaded._"
         for chat_id in self._admins:
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
