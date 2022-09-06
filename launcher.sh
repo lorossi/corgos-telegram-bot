@@ -1,7 +1,4 @@
 #!/bin/bash
-cd /home/pi/scripts/corgos-telegram-bot
+cd $(dirname $0)
 source venv/bin/activate
-python3 corgos-telegram-bot.py &
-
-
-
+python3 days_without_racism.py
