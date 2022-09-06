@@ -1,4 +1,4 @@
 #!/bin/bash
-cd $(dirname $0)
+cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source venv/bin/activate
-python3 days_without_racism.py
+python3 corgos-telegram-bot.py
