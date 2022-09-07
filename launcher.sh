@@ -1,4 +1,5 @@
 #!/bin/bash
-cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd /home/pi/scripts/corgos-telegram-bot
 source venv/bin/activate
 python3 corgos-telegram-bot.py
+deactivate
