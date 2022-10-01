@@ -4,7 +4,7 @@ import ujson
 import logging
 import asyncpraw
 
-from random import randint, shuffle
+from random import shuffle
 from urllib.request import urlopen
 
 
