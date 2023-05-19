@@ -18,6 +18,7 @@ import traceback
 import tracemalloc
 from datetime import datetime, time
 from random import choice, randint
+from sys import argv
 from time import sleep
 
 import ujson
@@ -248,7 +249,7 @@ class Telegram:
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-        loaded = self._reddit.loadPosts()
+        loaded = await self._reddit.loadPostsAsync()
 
         logging.info(f"{loaded} images loaded")
         message = f"_...{self._reddit.queueSize} corgos loaded._"
@@ -705,12 +706,18 @@ class Telegram:
         logging.error(f"Update {update} caused error {context.error}")
 
 
-def main():
+def main(argv: list[str]):
     """Start main function, setups logger and starts the bot."""
     # we log everything into the log file
+
+    if "--debug" in argv:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
-        level=logging.INFO,
+        level=level,
         format=(
             "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s "
             "(%(lineno)d) - %(message)s"
@@ -726,4 +733,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(argv)
