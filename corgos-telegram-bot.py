@@ -38,6 +38,10 @@ class Telegram:
     """This class contains all the methods and variables needed to \
         control the Telegram bot."""
 
+    _settings: dict[str, str | int]
+    _settings_path: str = "settings.json"
+    _reddit: Reddit
+
     def __init__(self) -> None:
         """Init the bot, loading the settings as well."""
         self._settings = {}
