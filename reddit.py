@@ -44,11 +44,11 @@ class Reddit:
         Unless differently specified during the instantiation, \
         the default settings path is used.
         """
-        logging.info("Loading settings")
+        logging.debug("Loading settings")
         with open(self._settings_path) as json_file:
             # only keeps settings for Reddit, discarding others
             self._settings = ujson.load(json_file)["Reddit"]
-        logging.info("Settings loaded")
+        logging.debug("Settings loaded")
 
     def _saveSettings(self) -> None:
         """Save settings in the settings file.
@@ -56,7 +56,7 @@ class Reddit:
         Unless differently specified during the instantiation, \
         the default settings path is used.
         """
-        logging.info("Saving settings")
+        logging.debug("Saving settings")
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -66,7 +66,7 @@ class Reddit:
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
-        logging.info("Settings saved")
+        logging.debug("Settings saved")
 
     def _scrapeGallery(self, media_metadata: dict) -> list[str]:
         """Scrape a gallery of images.
@@ -74,7 +74,7 @@ class Reddit:
         Args:
             url (str): url of the gallery
         """
-        logging.info("Scraping gallery")
+        logging.debug("Scraping gallery")
         urls = []
         for media in media_metadata.items():
             image_format = media[1]["m"]
@@ -88,7 +88,7 @@ class Reddit:
 
             urls.append(image_url)
 
-        logging.info(f"Found {len(urls)} images in gallery")
+        logging.debug(f"Found {len(urls)} images in gallery")
         return urls
 
     def _scrapeImage(self, url: str) -> list[str]:
@@ -97,15 +97,15 @@ class Reddit:
         Args:
             url (str): url of the image
         """
-        logging.info(f"Checking url {url}")
+        logging.debug(f"Checking url {url}")
         try:
             r = requests.head(url)
             image_format = r.headers["content-type"]
             if image_format in self._image_formats:
-                logging.info("Url is an image, adding to queue")
+                logging.debug("Url is an image, adding to queue")
                 return [url]
             else:
-                logging.info(f"Url is not an image, skipping. Format: {image_format}")
+                logging.debug(f"Url is not an image, skipping. Format: {image_format}")
                 return []
         except Exception as e:
             logging.error(f"Cannot open url {url}, error {e}")
@@ -126,7 +126,7 @@ class Reddit:
             user_agent=self._settings["user_agent"],
         )
 
-        logging.info("Logged into Reddit")
+        logging.debug("Logged into Reddit")
 
     async def _scrapePost(
         self,
@@ -137,38 +137,46 @@ class Reddit:
         async with semaphore:
             logging.info(f"Loading post with url {submission.url}")
             # skip stickied and selftexts, we don't need those
-            if submission.selftext or submission.stickied:
-                logging.info("Skipping post due to selftext or stickied")
+            if submission.stickied:
+                logging.warning(f"Skipping post {submission.url} due to stickied")
+                return False
+
+            if submission.selftext:
+                logging.warning(f"Skipping post {submission.url} due to selftext")
                 return False
 
             # skip posts that have a low score
             if submission.score < self._settings["min_score"]:
-                logging.info("Skipping post due to low score")
+                logging.warning(
+                    f"Skipping post {submission.url} due to low score "
+                    f"({submission.score}, min {self._settings['min_score']})"
+                )
                 return False
 
             # filter gifs
             if any(x in submission.url for x in [".gif", ".gifv", "v.redd.it"]):
-                logging.info("Skipping post due to gif")
+                logging.warning(f"Skipping post {submission.url} because is gif")
                 return False
 
-            logging.info("Post passed all checks, loading")
+            logging.debug("Post passed all checks, loading")
             await submission.load()
 
             # try to open the image
             if hasattr(submission, "is_gallery"):
-                logging.info("Post is a gallery, scraping")
+                logging.debug("Post is a gallery, scraping")
                 scraped_urls = self._scrapeGallery(submission.media_metadata)
             else:
-                logging.info("Post is not a gallery, checking")
+                logging.debug("Post is not a gallery, checking")
                 scraped_urls = self._scrapeImage(submission.url)
 
             # check the url for each image
             for url in scraped_urls:
-                logging.info(f"Checking url {url}")
+                logging.debug(f"Adding {url} to list")
                 # if it's a valid image, we add it to the queue
                 await queue_lock.acquire()
                 self._new_queue.append(url)
                 queue_lock.release()
+                logging.info(f"Added {url} to list")
 
     async def loadPostsAsync(self) -> int:
         """Load all image posts from the needed subreddit.
@@ -189,6 +197,7 @@ class Reddit:
         # load subreddits
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
         # create a list of tasks to be executed
+        logging.debug("Creating tasks")
         tasks = {
             self._scrapePost(submission, semaphore, lock)
             async for submission in subreddits.top(
@@ -196,6 +205,7 @@ class Reddit:
             )
         }
 
+        logging.debug("Executing tasks")
         try:
             # execute the tasks
             await asyncio.gather(*tasks)
@@ -241,7 +251,7 @@ class Reddit:
         Args:
             url (str): url to be removed
         """
-        logging.info(f"Removing url {url} from queue")
+        logging.debug(f"Removing url {url} from queue")
         self._queue.remove(url)
 
     @property
