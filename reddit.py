@@ -136,12 +136,12 @@ class Reddit:
     ) -> bool:
         async with semaphore:
             logging.info(f"Loading post with url {submission.url}")
-            # skip stickied and selftexts, we don't need those
+            # skip stickied posts
             if submission.stickied:
                 logging.warning(f"Skipping post {submission.url} due to stickied")
                 return False
-
-            if submission.selftext:
+            # skip selftext posts
+            if submission.is_self:
                 logging.warning(f"Skipping post {submission.url} due to selftext")
                 return False
 
@@ -166,7 +166,7 @@ class Reddit:
                 logging.debug("Post is a gallery, scraping")
                 scraped_urls = self._scrapeGallery(submission.media_metadata)
             else:
-                logging.debug("Post is not a gallery, checking")
+                logging.debug("Post is not a gallery, scraping")
                 scraped_urls = self._scrapeImage(submission.url)
 
             # check the url for each image
