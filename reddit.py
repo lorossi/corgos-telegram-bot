@@ -1,11 +1,11 @@
 """File containing the reddit interface to steal the images from reddit."""
 
-import ujson
 import logging
-import asyncpraw
-
 from random import shuffle
 from urllib.request import urlopen
+
+import asyncpraw
+import ujson
 
 
 class EmptyQueueException(Exception):
@@ -18,18 +18,20 @@ class Reddit:
     """This class contains all the methods and variables needed to load the \
     urls of the pictures from reddit."""
 
+    _queue: list[str]
+    _settings: dict
+    _settings_path: str = "settings.json"
+    _image_formats: tuple[str] = ("image/png", "image/jpeg")
+
     def __init__(self) -> None:
         """Initialize the Reddit interface."""
+        logging.info("Initializing Reddit interface")
         # clean the queue
         self._queue = []
         self._settings = {}
-        self._settings_path = "settings.json"
-        # whenever we scrape a link, we want to be sure it's just an image
-        # and not, for instance, a gif or a video. So this is a list of allowed
-        # image formats
-        self._image_formats = ("image/png", "image/jpeg")
         # load settings
         self._loadSettings()
+        logging.info("Reddit interface initialized")
 
     # Private methods
 
@@ -39,9 +41,11 @@ class Reddit:
         Unless differently specified during the instantiation, \
         the default settings path is used.
         """
+        logging.info("Loading settings")
         with open(self._settings_path) as json_file:
             # only keeps settings for Reddit, discarding others
             self._settings = ujson.load(json_file)["Reddit"]
+        logging.info("Settings loaded")
 
     def _saveSettings(self) -> None:
         """Save settings in the settings file.
@@ -49,6 +53,7 @@ class Reddit:
         Unless differently specified during the instantiation, \
         the default settings path is used.
         """
+        logging.info("Saving settings")
         with open(self._settings_path) as json_file:
             old_settings = ujson.load(json_file)
 
@@ -58,6 +63,7 @@ class Reddit:
 
         with open(self._settings_path, "w") as outfile:
             ujson.dump(old_settings, outfile, indent=2)
+        logging.info("Settings saved")
 
     def _checkSingleImage(self, url: str) -> bool:
         """Check if a url is a valid image.
@@ -68,6 +74,7 @@ class Reddit:
         Returns:
             bool
         """
+        logging.info(f"Checking url {url}")
         try:
             # log the content type in order to make sure it's an image
             content_type = urlopen(url).info()["content-type"]
@@ -100,6 +107,8 @@ class Reddit:
 
         User authentication details are loaded from settings file.
         """
+        logging.info("Logging into Reddit")
+
         self._reddit = asyncpraw.Reddit(
             client_id=self._settings["client_id"],
             client_secret=self._settings["client_secret"],
@@ -116,6 +125,7 @@ class Reddit:
         Returns:
             int: number of loaded posts
         """
+        logging.info("Loading posts from Reddit")
         # empties the queue
         new_queue = []
 
@@ -123,31 +133,39 @@ class Reddit:
         async for submission in subreddits.top(
             "week", limit=self._settings["post_limit"]
         ):
-
+            logging.info(f"Loading post {submission.title}")
             # skip stickied and selftexts, we don't need those
             if submission.selftext or submission.stickied:
+                logging.info("Skipping post due to selftext or stickied")
                 continue
 
             # skip posts that have a low score
             if submission.score < self._settings["min_score"]:
+                logging.info("Skipping post due to low score")
                 continue
 
             # filter gifs
             if "v.redd.it" in submission.url or ".gif" in submission.url:
+                logging.info("Skipping post due to gif")
                 continue
 
+            logging.info("Post passed all checks, loading")
             await submission.load()
 
             # try to open the image
             if hasattr(submission, "is_gallery"):
+                logging.info("Post is a gallery, scraping")
                 scraped_urls = self._scrapeGallery(submission.media_metadata)
             else:
+                logging.info("Post is not a gallery, checking")
                 scraped_urls = [submission.url]
 
             # check the url for each image
             for url in scraped_urls:
+                logging.info(f"Checking url {url}")
                 # if it's a valid image, we add it to the queue
                 if self._checkSingleImage(url):
+                    logging.info("Url is valid, adding to queue")
                     new_queue.append(url)
 
         # shuffles the list to make it more random
@@ -155,6 +173,7 @@ class Reddit:
 
         # copy the new queue to the old one
         self._queue = [url for url in new_queue]
+        logging.info(f"Loaded {len(self._queue)} posts from Reddit")
         return len(self._queue)
 
     def getImage(self) -> str:
@@ -162,11 +181,13 @@ class Reddit:
         # if somehow we did not load anything, we throw an exception
         # this should likely never happen, but might be triggered if the queue
         # has not been loaded yet
+        logging.info("Getting next image from queue")
         if len(self._queue) == 0:
             raise EmptyQueueException("Queue is empty.")
 
         url = self._queue[0]  # first in rotation is the next url
         self._queue.append(self._queue.pop(0))  # list rotation
+        logging.info(f"Next image is {url}")
         return url
 
     def removeImage(self, url: str) -> None:
@@ -175,6 +196,7 @@ class Reddit:
         Args:
             url (str): url to be removed
         """
+        logging.info(f"Removing url {url} from queue")
         self._queue.remove(url)
 
     @property

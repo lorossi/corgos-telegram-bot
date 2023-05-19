@@ -249,8 +249,8 @@ class Telegram:
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-        def posts_loaded(async_context: asyncio.futures) -> None:
-            logging.info(f"{async_context.result()} images loaded")
+        def posts_loaded(future: asyncio.futures) -> None:
+            logging.info(f"{future.result()} images loaded")
             asyncio.create_task(self._postsLoaded(context))
 
         task = asyncio.create_task(self._reddit.loadPosts())
@@ -380,10 +380,11 @@ class Telegram:
                     break
                 except Exception as e:
                     # the photo could not be sent, try again in a little while
-                    # photos that cannot be sent should be removed from the queue, but this approach
-                    # works anyway
+                    # photos that cannot be sent should be removed from the queue,
+                    # but this approach works anyway
                     logging.error(
-                        f"Error while sending photo {url}. Error {e}. Retrying in 0.5 seconds."
+                        f"Error while sending photo {url}. Error {e}. "
+                        "Retrying in 0.5 seconds."
                     )
                     sleep(0.5)
         # increase the corgo counter
@@ -720,7 +721,10 @@ def main():
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
+        format=(
+            "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s "
+            "(%(lineno)d) - %(message)s"
+        ),
         filemode="w",
     )
     # exception tracking
