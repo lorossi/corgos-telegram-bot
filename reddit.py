@@ -238,20 +238,3 @@ class Reddit:
     def queueSize(self) -> int:
         """Return the size of the queue."""
         return len(self._queue)
-
-
-def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format=(
-            "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s "
-            "(%(lineno)d) - %(message)s"
-        ),
-    )
-    r = Reddit()
-    r.login()
-    asyncio.run(r.loadPosts())
-
-
-if __name__ == "__main__":
-    main()
