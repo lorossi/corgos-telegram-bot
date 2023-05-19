@@ -1,11 +1,13 @@
 """File containing the reddit interface to steal the images from reddit."""
 
+import asyncio
 import logging
 from random import shuffle
-from urllib.request import urlopen
+import requests
 
 import asyncpraw
 import ujson
+from asyncpraw.models import Submission
 
 
 class EmptyQueueException(Exception):
@@ -19,6 +21,7 @@ class Reddit:
     urls of the pictures from reddit."""
 
     _queue: list[str]
+    _new_queue: list[str]
     _settings: dict
     _settings_path: str = "settings.json"
     _image_formats: tuple[str] = ("image/png", "image/jpeg")
@@ -65,40 +68,48 @@ class Reddit:
             ujson.dump(old_settings, outfile, indent=2)
         logging.info("Settings saved")
 
-    def _checkSingleImage(self, url: str) -> bool:
-        """Check if a url is a valid image.
-
-        Args:
-            url (str): Reddit post url
-
-        Returns:
-            bool
-        """
-        logging.info(f"Checking url {url}")
-        try:
-            # log the content type in order to make sure it's an image
-            content_type = urlopen(url).info()["content-type"]
-        except Exception as e:
-            # if it fails, it's because the image has been removed
-            logging.error(f"Cannot open url {url}, error {e}")
-            return False
-
-        # if it's not an image, we skip the current url
-        if content_type not in self._image_formats:
-            return False
-
-        return True
-
     def _scrapeGallery(self, media_metadata: dict) -> list[str]:
         """Scrape a gallery of images.
 
         Args:
             url (str): url of the gallery
         """
+        logging.info("Scraping gallery")
         urls = []
         for media in media_metadata.items():
-            urls.append(media[1]["s"]["u"])
+            image_format = media[1]["m"]
+
+            if image_format in self._image_formats:
+                continue
+
+            image_url = media[1]["s"].get("u", None)
+            if image_url is None:
+                continue
+
+            urls.append(image_url)
+
+        logging.info(f"Found {len(urls)} images in gallery")
         return urls
+
+    def _scrapeImage(self, url: str) -> list[str]:
+        """Scrape a single image.
+
+        Args:
+            url (str): url of the image
+        """
+        logging.info(f"Checking url {url}")
+        try:
+            r = requests.head(url)
+            image_format = r.headers["content-type"]
+            if image_format in self._image_formats:
+                logging.info("Url is an image, adding to queue")
+                return [url]
+            else:
+                logging.info(f"Url is not an image, skipping. Format: {image_format}")
+                return []
+        except Exception as e:
+            logging.error(f"Cannot open url {url}, error {e}")
+            return []
 
     # Public methods
 
@@ -117,37 +128,28 @@ class Reddit:
 
         logging.info("Logged into Reddit")
 
-    async def loadPosts(self) -> int:
-        """Load all image posts from the needed subreddit.
-
-        The links are shuffled and kept into memory.
-
-        Returns:
-            int: number of loaded posts
-        """
-        logging.info("Loading posts from Reddit")
-        # empties the queue
-        new_queue = []
-
-        subreddits = await self._reddit.subreddit("corgi+babycorgis")
-        async for submission in subreddits.top(
-            "week", limit=self._settings["post_limit"]
-        ):
-            logging.info(f"Loading post {submission.title}")
+    async def _scrapePost(
+        self,
+        submission: Submission,
+        semaphore: asyncio.Semaphore,
+        queue_lock: asyncio.Lock,
+    ) -> bool:
+        async with semaphore:
+            logging.info(f"Loading post with url {submission.url}")
             # skip stickied and selftexts, we don't need those
             if submission.selftext or submission.stickied:
                 logging.info("Skipping post due to selftext or stickied")
-                continue
+                return False
 
             # skip posts that have a low score
             if submission.score < self._settings["min_score"]:
                 logging.info("Skipping post due to low score")
-                continue
+                return False
 
             # filter gifs
-            if "v.redd.it" in submission.url or ".gif" in submission.url:
+            if any(x in submission.url for x in [".gif", ".gifv", "v.redd.it"]):
                 logging.info("Skipping post due to gif")
-                continue
+                return False
 
             logging.info("Post passed all checks, loading")
             await submission.load()
@@ -158,21 +160,54 @@ class Reddit:
                 scraped_urls = self._scrapeGallery(submission.media_metadata)
             else:
                 logging.info("Post is not a gallery, checking")
-                scraped_urls = [submission.url]
+                scraped_urls = self._scrapeImage(submission.url)
 
             # check the url for each image
             for url in scraped_urls:
                 logging.info(f"Checking url {url}")
                 # if it's a valid image, we add it to the queue
-                if self._checkSingleImage(url):
-                    logging.info("Url is valid, adding to queue")
-                    new_queue.append(url)
+                await queue_lock.acquire()
+                self._new_queue.append(url)
+                queue_lock.release()
 
-        # shuffles the list to make it more random
-        shuffle(new_queue)
+    async def loadPosts(self) -> int:
+        """Load all image posts from the needed subreddit.
+
+        The links are shuffled and kept into memory.
+
+        Returns:
+            int: number of loaded posts
+        """
+        logging.info("Loading posts from Reddit")
+        # empties the queue
+        self._new_queue = []
+
+        # create a semaphore to limit the number of concurrent requests
+        semaphore = asyncio.Semaphore(self._settings["concurrent_requests"])
+        # create a lock for the new queue
+        lock = asyncio.Lock()
+        # load subreddits
+        subreddits = await self._reddit.subreddit("corgi+babycorgis")
+        # create a list of tasks to be executed
+        tasks = {
+            self._scrapePost(submission, semaphore, lock)
+            async for submission in subreddits.top(
+                "week", limit=self._settings["post_limit"]
+            )
+        }
+
+        try:
+            # execute the tasks
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            logging.error("Posta loading cancelled")
+            return 0
+
+        # shuffle the list to make it more random
+        shuffle(self._new_queue)
 
         # copy the new queue to the old one
-        self._queue = [url for url in new_queue]
+        self._queue = self._new_queue.copy()
         logging.info(f"Loaded {len(self._queue)} posts from Reddit")
         return len(self._queue)
 
@@ -203,3 +238,20 @@ class Reddit:
     def queueSize(self) -> int:
         """Return the size of the queue."""
         return len(self._queue)
+
+
+def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format=(
+            "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s "
+            "(%(lineno)d) - %(message)s"
+        ),
+    )
+    r = Reddit()
+    r.login()
+    asyncio.run(r.loadPosts())
+
+
+if __name__ == "__main__":
+    main()
