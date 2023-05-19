@@ -77,13 +77,27 @@ class Reddit:
         logging.debug("Scraping gallery")
         urls = []
         for media in media_metadata.items():
-            image_format = media[1]["m"]
+            if len(media) < 2:
+                logging.debug("Media metadata is not valid, skipping")
+                continue
+
+            image_format = media[1].get("m", None)
+            if image_format is None:
+                logging.debug("Url is not an image, skipping")
+                continue
 
             if image_format in self._image_formats:
+                logging.debug("Url is an image, adding to queue")
+                continue
+
+            image_obj = media[1].get("s", None)
+            if image_obj is None:
+                logging.debug("Url gallery does not contain this image, skipping")
                 continue
 
             image_url = media[1]["s"].get("u", None)
             if image_url is None:
+                logging.debug("Url is not an image, skipping")
                 continue
 
             urls.append(image_url)
