@@ -11,28 +11,27 @@ Yeah, I'm about as surprised as you.
 License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 """
 
-import os
-import sys
-import ujson
 import asyncio
 import logging
+import os
+import sys
 import traceback
 import tracemalloc
-
-from reddit import Reddit, EmptyQueueException
-
-from time import sleep
-from contextvars import Context
-from random import choice, randint
 from datetime import datetime, time
+from random import choice, randint
+from time import sleep
+
+import ujson
 from telegram import Update, constants
 from telegram.ext import (
-    CommandHandler,
+    Application,
     CallbackContext,
+    CommandHandler,
     MessageHandler,
     filters,
-    Application,
 )
+
+from reddit import EmptyQueueException, Reddit
 
 
 class Telegram:
@@ -250,7 +249,7 @@ class Telegram:
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-        def posts_loaded(async_context: Context) -> None:
+        def posts_loaded(async_context: asyncio.futures) -> None:
             logging.info(f"{async_context.result()} images loaded")
             asyncio.create_task(self._postsLoaded(context))
 
