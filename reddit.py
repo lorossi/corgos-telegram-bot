@@ -3,9 +3,9 @@
 import asyncio
 import logging
 from random import shuffle
-import requests
 
 import asyncpraw
+import requests
 import ujson
 from asyncpraw.models import Submission
 
