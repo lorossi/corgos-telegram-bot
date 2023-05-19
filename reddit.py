@@ -170,7 +170,7 @@ class Reddit:
                 self._new_queue.append(url)
                 queue_lock.release()
 
-    async def loadPosts(self) -> int:
+    async def loadPostsAsync(self) -> int:
         """Load all image posts from the needed subreddit.
 
         The links are shuffled and kept into memory.
@@ -210,6 +210,16 @@ class Reddit:
         self._queue = self._new_queue.copy()
         logging.info(f"Loaded {len(self._queue)} posts from Reddit")
         return len(self._queue)
+
+    def loadPosts(self) -> int:
+        """Load all image posts from the needed subreddit.
+
+        The links are shuffled and kept into memory.
+
+        Returns:
+            int: number of loaded posts
+        """
+        return asyncio.run(self.loadPostsAsync())
 
     def getImage(self) -> str:
         """Return the url of the next image in the queue."""

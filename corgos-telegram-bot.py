@@ -11,7 +11,6 @@ Yeah, I'm about as surprised as you.
 License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 """
 
-import asyncio
 import logging
 import os
 import sys
@@ -249,28 +248,19 @@ class Telegram:
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-        def posts_loaded(future: asyncio.futures) -> None:
-            logging.info(f"{future.result()} images loaded")
-            asyncio.create_task(self._postsLoaded(context))
+        loaded = self._reddit.loadPosts()
 
-        task = asyncio.create_task(self._reddit.loadPosts())
-        task.add_done_callback(posts_loaded)
-
-    async def _preloadUsername(self, context: CallbackContext) -> None:
-        # load the bot username
-        me = await self._application.bot.get_me()
-        self._bot_username = "@" + me.username
-
-    async def _postsLoaded(self, context: CallbackContext) -> None:
-        """Send a message to admins when the posts are loaded.
-
-        Callback fired when the posts are loaded from Reddit
-        """
+        logging.info(f"{loaded} images loaded")
         message = f"_...{self._reddit.queueSize} corgos loaded._"
         for chat_id in self._admins:
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
+
+    async def _preloadUsername(self, context: CallbackContext) -> None:
+        # load the bot username
+        me = await self._application.bot.get_me()
+        self._bot_username = "@" + me.username
 
     async def _botStartCommand(self, update: Update, context: CallbackContext) -> None:
         """Greet the user when /start is called.
