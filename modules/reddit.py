@@ -17,7 +17,7 @@ class EmptyQueueException(Exception):
 
 
 class Reddit:
-    """This class contains all the methods and variables needed to load the \
+    """This class contains all the methods and variables needed to load the
     urls of the pictures from reddit."""
 
     _queue: list[str]
@@ -41,7 +41,7 @@ class Reddit:
     def _loadSettings(self) -> None:
         """Load settings from the settings file.
 
-        Unless differently specified during the instantiation, \
+        Unless differently specified during the instantiation,
         the default settings path is used.
         """
         logging.debug("Loading settings")
@@ -53,7 +53,7 @@ class Reddit:
     def _saveSettings(self) -> None:
         """Save settings in the settings file.
 
-        Unless differently specified during the instantiation, \
+        Unless differently specified during the instantiation,
         the default settings path is used.
         """
         logging.debug("Saving settings")
