@@ -1,4 +1,4 @@
 asyncpraw==7.7.0
 python-telegram-bot[job-queue]==20.3
-ujson==5.4.0
-requests==2.30.0
+ujson==5.7.0
+requests==2.31.0
