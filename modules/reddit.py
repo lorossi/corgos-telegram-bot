@@ -5,9 +5,9 @@ import logging
 from random import shuffle
 
 import asyncpraw
-import requests
 import ujson
 from asyncpraw.models import Submission
+import aiohttp
 
 
 class EmptyQueueException(Exception):
@@ -21,9 +21,11 @@ class Reddit:
     urls of the pictures from reddit."""
 
     _queue: list[str]
-    _new_queue: list[str]
+    _temp_queue: list[str]
     _queue_lock: asyncio.Lock
-    _requests_semaphore: asyncio.Semaphore
+    _temp_queue_lock: asyncio.Lock
+    _praw_requests_semaphore: asyncio.Semaphore
+    _http_requests_semaphore: asyncio.Semaphore
     _reddit: asyncpraw.Reddit
 
     _settings: dict[str, str | int]
@@ -33,18 +35,24 @@ class Reddit:
     def __init__(self) -> None:
         """Initialize the Reddit interface."""
         logging.info("Initializing Reddit interface")
-        # clean the queue
+        # create the queues
         self._queue = []
-        self._settings = {}
+        self._temp_queue = []
+
         # load settings
         self._loadSettings()
 
-        # create a semaphore to limit the number of concurrent requests
-        self._requests_semaphore = asyncio.Semaphore(
+        # create a semaphore for the reddit requests
+        self._praw_requests_semaphore = asyncio.Semaphore(
+            self._settings["concurrent_requests"]
+        )
+        # create a semaphore for the http requests
+        self._http_requests_semaphore = asyncio.Semaphore(
             self._settings["concurrent_requests"]
         )
         # create a lock for the new queue
         self._queue_lock = asyncio.Lock()
+        self._temp_queue_lock = asyncio.Lock()
         logging.info("Reddit interface initialized")
 
     # Private methods
@@ -79,7 +87,23 @@ class Reddit:
             ujson.dump(old_settings, outfile, indent=2)
         logging.debug("Settings saved")
 
-    def _scrapeGallery(self, media_metadata: dict) -> list[str]:
+    async def _asyncRequest(self, url: str) -> aiohttp.ClientResponse:
+        """Make an async request to the specified url.
+
+        Args:
+            url (str): url to be requested
+
+        Returns:
+            Response: response of the request
+        """
+        async with self._http_requests_semaphore:
+            logging.debug(f"Requesting url {url}")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    logging.debug(f"Request to url {url} completed")
+                    return response
+
+    async def _scrapeGallery(self, media_metadata: dict) -> list[str]:
         """Scrape a gallery of images.
 
         Args:
@@ -111,30 +135,35 @@ class Reddit:
                 logging.debug("Url is not an image, skipping")
                 continue
 
+            image_valid = await self._scrapeImage(image_url)
+            if image_valid is None:
+                logging.debug("Url is not an image, skipping")
+                continue
+
             urls.append(image_url)
 
         logging.debug(f"Found {len(urls)} images in gallery")
         return urls
 
-    def _scrapeImage(self, url: str) -> list[str]:
-        """Scrape a single image.
+    async def _scrapeImage(self, url: str) -> str:
+        """Load a single image, check if it's valid and add it to the queue.
 
         Args:
             url (str): url of the image
         """
         logging.debug(f"Checking url {url}")
         try:
-            r = requests.head(url)
+            r = await self._asyncRequest(url)
             image_format = r.headers["content-type"]
             if image_format in self._image_formats:
                 logging.debug("Url is an image, adding to queue")
-                return [url]
+                return url
             else:
                 logging.debug(f"Url is not an image, skipping. Format: {image_format}")
-                return []
+                return None
         except Exception as e:
             logging.error(f"Cannot open url {url}, error {e}")
-            return []
+            return None
 
     # Public methods
 
@@ -157,7 +186,7 @@ class Reddit:
         self,
         submission: Submission,
     ) -> bool:
-        """Scrape a post from Reddit.
+        """Scrape a post from Reddit and add it to the temporary queue.
 
         Args:
             submission (Submission)
@@ -165,7 +194,7 @@ class Reddit:
         Returns:
             bool: True if the post is valid, False otherwise
         """
-        async with self._requests_semaphore:
+        async with self._praw_requests_semaphore:
             logging.info(f"Loading post with url {submission.url}")
             # skip stickied posts
             if submission.stickied:
@@ -193,35 +222,39 @@ class Reddit:
             await submission.load()
 
             # try to open the image
+            scraped_urls = []
             if hasattr(submission, "is_gallery"):
                 logging.debug("Post is a gallery, scraping")
-                scraped_urls = self._scrapeGallery(submission.media_metadata)
+                scraped_urls = await self._scrapeGallery(submission.media_metadata)
             else:
                 logging.debug("Post is not a gallery, scraping")
-                scraped_urls = self._scrapeImage(submission.url)
+                new_url = await self._scrapeImage(submission.url)
+                scraped_urls.append(new_url)
 
             # check the url for each image
             for url in scraped_urls:
-                logging.debug(f"Adding {url} to list")
                 # if it's a valid image, we add it to the queue
-                await self._queue_lock.acquire()
-                self._new_queue.append(url)
-                self._queue_lock.release()
+                logging.debug(f"Adding {url} to list")
+                await self._temp_queue_lock.acquire()
+                self._temp_queue.append(url)
+                self._temp_queue_lock.release()
                 logging.info(f"Added {url} to list")
 
             return True
 
-    async def loadPostsAsync(self) -> int:
+    async def loadPostsAsync(self) -> None:
         """Load all image posts from the needed subreddit.
 
         The links are shuffled and kept into memory.
 
         Returns:
-            int: number of loaded posts
+            int: number of posts loaded
         """
         logging.info("Loading posts from Reddit")
-        # empties the queue
-        self._new_queue = []
+        # empty the queue
+        await self._temp_queue_lock.acquire()
+        self._temp_queue = []
+        self._temp_queue_lock.release()
 
         # load subreddits
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
@@ -233,57 +266,78 @@ class Reddit:
                 "week", limit=self._settings["post_limit"]
             )
         }
-
         logging.debug("Executing tasks")
-        try:
-            # execute the tasks
-            await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            logging.error("Posta loading cancelled")
-            return 0
+        # execute all the tasks and wait for them to finish
+        await asyncio.gather(*tasks)
 
-        # shuffle the list to make it more random
-        shuffle(self._new_queue)
+        # shuffle the queue and empty the temporary queue
+        await self._queue_lock.acquire()
+        await self._temp_queue_lock.acquire()
+        self._queue = self._temp_queue.copy()
+        shuffle(self._queue)
+        self._temp_queue = []
+        self._temp_queue_lock.release()
+        self._queue_lock.release()
 
-        # copy the new queue to the old one
-        self._queue = self._new_queue.copy()
+        # return the number of posts loaded
         logging.info(f"Loaded {len(self._queue)} posts from Reddit")
         return len(self._queue)
 
-    def loadPosts(self) -> int:
-        """Load all image posts from the needed subreddit.
-
-        The links are shuffled and kept into memory.
-
-        Returns:
-            int: number of loaded posts
-        """
-        return asyncio.run(self.loadPostsAsync())
-
-    def getImage(self) -> str:
+    async def getUrl(self) -> str:
         """Return the url of the next image in the queue."""
         # if somehow we did not load anything, we throw an exception
         # this should likely never happen, but might be triggered if the queue
         # has not been loaded yet
         logging.info("Getting next image from queue")
-        if len(self._queue) == 0:
-            raise EmptyQueueException("Queue is empty.")
+        queue_size = await self.getQueueSize()
+        if queue_size == 0:
+            logging.warning("Queue is empty. Trying temporary queue")
+            raise EmptyQueueException
 
-        url = self._queue[0]  # first in rotation is the next url
-        self._queue.append(self._queue.pop(0))  # list rotation
+        url = await self._rotateQueue()
         logging.info(f"Next image is {url}")
         return url
 
-    def removeImage(self, url: str) -> None:
+    async def removeUrl(self, url: str) -> None:
         """Remove an url from the queue.
 
         Args:
             url (str): url to be removed
         """
         logging.debug(f"Removing url {url} from queue")
+        await self._queue_lock.acquire()
         self._queue.remove(url)
+        self._queue_lock.release()
 
-    @property
-    def queueSize(self) -> int:
+    async def _rotateQueue(self) -> str:
+        """Rotate the queue and return the next url.
+
+        Returns:
+            str: next url
+        """
+        logging.debug("Rotating queue")
+        await self._queue_lock.acquire()
+        url = self._queue[0]
+        self._queue.append(self._queue.pop(0))
+        self._queue_lock.release()
+        return url
+
+    async def getTempQueueSize(self) -> int:
+        """Return the size of the temporary queue."""
+        logging.debug("Getting temporary queue size")
+        await self._temp_queue_lock.acquire()
+        size = len(self._temp_queue)
+        self._temp_queue_lock.release()
+
+        logging.debug(f"Temporary queue size is {size}")
+        return size
+
+    async def getQueueSize(self) -> int:
         """Return the size of the queue."""
-        return len(self._queue)
+        logging.debug("Getting queue size")
+        await self._queue_lock.acquire()
+        size = len(self._queue)
+        self._queue_lock.release()
+
+        logging.debug(f"Queue size is {size}")
+        return size

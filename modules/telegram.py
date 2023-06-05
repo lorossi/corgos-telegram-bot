@@ -17,7 +17,6 @@ import sys
 import traceback
 from datetime import datetime, time
 from random import choice, randint
-from time import sleep
 
 import ujson
 from telegram import Update, constants
@@ -29,7 +28,7 @@ from telegram.ext import (
     filters,
 )
 
-from modules.reddit import EmptyQueueException, Reddit
+from modules.reddit import Reddit, EmptyQueueException
 
 
 class Telegram:
@@ -251,14 +250,18 @@ class Telegram:
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-        loaded = await self._reddit.loadPostsAsync()
+        logging.info("Downloading posts from Reddit.")
+        posts = await self._reddit.loadPostsAsync()
+        logging.info(f"Downloaded {posts} posts from Reddit.")
 
-        logging.info(f"{loaded} images loaded")
-        message = f"_...{self._reddit.queueSize} corgos loaded._"
+        message = f"_{posts} posts have been loaded._"
         for chat_id in self._admins:
             await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
+                chat_id=chat_id,
+                text=message,
+                parse_mode=constants.ParseMode.MARKDOWN,
             )
+        logging.info("Posts loaded.")
 
     async def _preloadUsername(self, _: CallbackContext) -> None:
         # load the bot username
@@ -341,47 +344,35 @@ class Telegram:
             )
             return
 
-        caption = self._bot_username
+        if await self._reddit.getQueueSize() == 0:
+            # if the queue is empty, we want to notify the user
+            message = (
+                "_The bot is currently out of corgos!_\n_Wait a bit and try again._"
+            )
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
+            )
+            return
 
-        if randint(0, 1000) == 0:
-            # send a golden corgo
+        if randint(1, 1000) == 1:
+            # if we are lucky enough, we get a golden corgo!
             url = self._golden_corgo_url
-            await context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption)
-            self._golden_corgos_found += 1
+            message = "\n*GOLDEN CORGO FOUND!*"
         else:
-            # send a normal corgo
-            while True:
-                try:
-                    # try to get an url from the reddit instance
-                    url = self._reddit.getImage()
-                except EmptyQueueException:
-                    # the queue is empty, tell the user to try again later
-                    logging.error("Error while sending photo. Empty queue.")
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text="The bot is fetching some new corgos. "
-                        "_Please wait a second and try again!_",
-                        parse_mode=constants.ParseMode.MARKDOWN,
-                    )
-                    return
+            # otherwise we get a normal corgo
+            url = await self._reddit.getUrl()
+            message = self._escapeMarkdown(self._bot_username)
 
-                try:
-                    # try to send the photo
-                    await context.bot.send_photo(
-                        chat_id=chat_id, photo=url, caption=caption
-                    )
-                    break
-                except Exception as e:
-                    # the photo could not be sent, try again in a little while
-                    # photos that cannot be sent should be removed from the queue,
-                    # but this approach works anyway
-                    logging.error(
-                        f"Error while sending photo {url}. Error {e}. "
-                        "Retrying in 0.5 seconds."
-                    )
-                    sleep(0.5)
         # increase the corgo counter
         self._corgos_sent += 1
+
+        # send the corgo to the user
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=url,
+            caption=message,
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
 
         # send another message to the user
         message = "_Press /corgo for another corgo!_"
