@@ -36,7 +36,7 @@ class Telegram:
     """This class contains all the methods and variables needed to
     control the Telegram bot."""
 
-    _settings: dict[str, str | int]
+    _settings: dict[str, str | int | list[str]]
     _settings_path: str = "settings.json"
     _reddit: Reddit
 
@@ -123,7 +123,7 @@ class Telegram:
         """
         to_escape = ["_", "*", "[", "]", "(", ")"]
         for char in to_escape:
-            text = text.replace(char, f"{char}")
+            text = text.replace(char, f"\\{char}")
         return text
 
     # Public methods
@@ -260,7 +260,7 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-    async def _preloadUsername(self, context: CallbackContext) -> None:
+    async def _preloadUsername(self, _: CallbackContext) -> None:
         # load the bot username
         me = await self._application.bot.get_me()
         self._bot_username = "@" + me.username
@@ -404,9 +404,9 @@ class Telegram:
         )
 
         message = (
-            f"Some say that a _golden corgo_ is hiding inside Telegram... n"
+            f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
             f"All we know is that if you are lucky enough, once in maybe "
-            f"1000 corgos you might find one. n"
+            f"1000 corgos you might find one. \n"
             f"_So far, {self._golden_corgos_found} have been found "
             f"roaming this bot..._"
         )
@@ -417,7 +417,7 @@ class Telegram:
 
         username = self._escapeMarkdown(self._bot_username)
         message = (
-            f"*Maybe you too will be blessed by this elusive good boi!*n" f"{username}"
+            f"*Maybe you too will be blessed by this elusive good boi!*\n" f"{username}"
         )
 
         await context.bot.send_message(
@@ -458,7 +458,7 @@ class Telegram:
                 )
 
             except Exception as e:
-                message = "*Golden Corgo picture not found!*n"
+                message = "*Golden Corgo picture not found!*\n"
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=message,
@@ -502,10 +502,10 @@ class Telegram:
         average = int(self._corgos_sent / days_between)
 
         message = (
-            f"The bot has been running for *{days_between}* days.n"
+            f"The bot has been running for *{days_between}* days.\n"
             f"*{self._corgos_sent}* photos have been sent, "
             f"averaging *{average}* corgos per day!"
-            f" _{choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}_! n"
+            f" _{choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}_!\n"
             f"*{self._golden_corgos_found}* golden corgos were found!"
         )
 
@@ -683,8 +683,8 @@ class Telegram:
         time_string = datetime.now().isoformat()
 
         message = (
-            f"Error at time: {time_string}n"
-            f"Error raised: {error_string}n"
+            f"Error at time: {time_string}\n"
+            f"Error raised: {error_string}\n"
             f"Update: {update}"
         )
 
@@ -697,7 +697,7 @@ class Telegram:
             #   an update
             chat_id = update.effective_chat.id
             message = (
-                "_Oh h*ck, the bot is doing a splish splosh_ n" "*Please try again*"
+                "_Oh h*ck, the bot is doing a splish splosh_\n" "*Please try again*"
             )
 
             await context.bot.send_message(

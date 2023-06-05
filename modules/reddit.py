@@ -148,6 +148,16 @@ class Reddit:
         semaphore: asyncio.Semaphore,
         queue_lock: asyncio.Lock,
     ) -> bool:
+        """Scrape a post from Reddit.
+
+        Args:
+            submission (Submission)
+            semaphore (asyncio.Semaphore)
+            queue_lock (asyncio.Lock)
+
+        Returns:
+            bool: True if the post is valid, False otherwise
+        """
         async with semaphore:
             logging.info(f"Loading post with url {submission.url}")
             # skip stickied posts
@@ -191,6 +201,8 @@ class Reddit:
                 self._new_queue.append(url)
                 queue_lock.release()
                 logging.info(f"Added {url} to list")
+
+            return True
 
     async def loadPostsAsync(self) -> int:
         """Load all image posts from the needed subreddit.
