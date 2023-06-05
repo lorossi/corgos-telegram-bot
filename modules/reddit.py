@@ -22,7 +22,11 @@ class Reddit:
 
     _queue: list[str]
     _new_queue: list[str]
-    _settings: dict
+    _queue_lock: asyncio.Lock
+    _requests_semaphore: asyncio.Semaphore
+    _reddit: asyncpraw.Reddit
+
+    _settings: dict[str, str | int]
     _settings_path: str = "settings.json"
     _image_formats: tuple[str] = ("image/png", "image/jpeg")
 
@@ -34,6 +38,13 @@ class Reddit:
         self._settings = {}
         # load settings
         self._loadSettings()
+
+        # create a semaphore to limit the number of concurrent requests
+        self._requests_semaphore = asyncio.Semaphore(
+            self._settings["concurrent_requests"]
+        )
+        # create a lock for the new queue
+        self._queue_lock = asyncio.Lock()
         logging.info("Reddit interface initialized")
 
     # Private methods
@@ -145,20 +156,16 @@ class Reddit:
     async def _scrapePost(
         self,
         submission: Submission,
-        semaphore: asyncio.Semaphore,
-        queue_lock: asyncio.Lock,
     ) -> bool:
         """Scrape a post from Reddit.
 
         Args:
             submission (Submission)
-            semaphore (asyncio.Semaphore)
-            queue_lock (asyncio.Lock)
 
         Returns:
             bool: True if the post is valid, False otherwise
         """
-        async with semaphore:
+        async with self._requests_semaphore:
             logging.info(f"Loading post with url {submission.url}")
             # skip stickied posts
             if submission.stickied:
@@ -197,9 +204,9 @@ class Reddit:
             for url in scraped_urls:
                 logging.debug(f"Adding {url} to list")
                 # if it's a valid image, we add it to the queue
-                await queue_lock.acquire()
+                await self._queue_lock.acquire()
                 self._new_queue.append(url)
-                queue_lock.release()
+                self._queue_lock.release()
                 logging.info(f"Added {url} to list")
 
             return True
@@ -216,16 +223,12 @@ class Reddit:
         # empties the queue
         self._new_queue = []
 
-        # create a semaphore to limit the number of concurrent requests
-        semaphore = asyncio.Semaphore(self._settings["concurrent_requests"])
-        # create a lock for the new queue
-        lock = asyncio.Lock()
         # load subreddits
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
         # create a list of tasks to be executed
         logging.debug("Creating tasks")
         tasks = {
-            self._scrapePost(submission, semaphore, lock)
+            self._scrapePost(submission)
             async for submission in subreddits.top(
                 "week", limit=self._settings["post_limit"]
             )
