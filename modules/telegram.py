@@ -22,7 +22,7 @@ import ujson
 from telegram import Update, constants
 from telegram.ext import (
     Application,
-    CallbackContext,
+    ContextTypes,
     CommandHandler,
     MessageHandler,
     filters,
@@ -150,7 +150,7 @@ class Telegram:
 
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
-        self._application.add_error_handler(self._botError)
+        self._application.add_error_handler(self._errorHandler)
 
         # these are the handlers for all the commands
         self._application.add_handler(CommandHandler("start", self._botStartCommand))
@@ -224,7 +224,7 @@ class Telegram:
 
     # Callbacks
 
-    async def _botStarted(self, context: CallbackContext) -> None:
+    async def _botStarted(self, context: ContextTypes) -> None:
         """Send a message to admins when the bot starts.
 
         Callback fired at startup from JobQueue
@@ -235,7 +235,7 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-    async def _loadPosts(self, context: CallbackContext) -> None:
+    async def _loadPosts(self, context: ContextTypes) -> None:
         """Load posts from Reddit.
 
         Callback fired at startup and at night in set days from JobQueue
@@ -263,12 +263,12 @@ class Telegram:
             )
         logging.info("Posts loaded.")
 
-    async def _preloadUsername(self, _: CallbackContext) -> None:
+    async def _preloadUsername(self, _: ContextTypes) -> None:
         # load the bot username
         me = await self._application.bot.get_me()
         self._bot_username = "@" + me.username
 
-    async def _botStartCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStartCommand(self, update: Update, context: ContextTypes) -> None:
         """Greet the user when /start is called.
 
         Callback fired with command /start
@@ -281,7 +281,7 @@ class Telegram:
 
         logging.info("/start called")
 
-    async def _botStopCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStopCommand(self, update: Update, context: ContextTypes) -> None:
         """Completely stops the bot.
 
         Callback fired with command /stop
@@ -306,7 +306,7 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-    async def _botResetCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botResetCommand(self, update: Update, context: ContextTypes) -> None:
         """Reset the bot.
 
         Callback fired with command /reset
@@ -324,7 +324,7 @@ class Telegram:
             # System command to reload the python script
             os.execl(sys.executable, sys.executable, *sys.argv)
 
-    async def _botCorgoCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botCorgoCommand(self, update: Update, context: ContextTypes) -> None:
         """Send a corgo to the user.
 
         Callback fired with command /corgo
@@ -383,7 +383,7 @@ class Telegram:
         logging.info("Corgo sent")
 
     async def _botGoldencorgoCommand(
-        self, update: Update, context: CallbackContext
+        self, update: Update, context: ContextTypes
     ) -> None:
         """Narrate the legend of the golden corgo to the user.
 
@@ -417,7 +417,7 @@ class Telegram:
 
         logging.info("/goldencorgo called")
 
-    async def _botCheckCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botCheckCommand(self, update: Update, context: ContextTypes) -> None:
         """Check if the golden corgo picture is still available.
 
         Callback fired with command /check
@@ -474,7 +474,7 @@ class Telegram:
 
         logging.info("/check called")
 
-    async def _botStatsCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botStatsCommand(self, update: Update, context: ContextTypes) -> None:
         """Return stats about the bot.
 
         Callback fired with command  /stats
@@ -508,7 +508,7 @@ class Telegram:
 
         logging.info("/stats called")
 
-    async def _botPingCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botPingCommand(self, update: Update, context: ContextTypes) -> None:
         """Reply "PONG" to the user.
 
         Callback fired with command /ping for debug purposes
@@ -521,7 +521,7 @@ class Telegram:
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-    async def _botBanCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botBanCommand(self, update: Update, context: ContextTypes) -> None:
         """Ban a chat from the bot.
 
         Hidden command as it's not the in command list
@@ -545,7 +545,7 @@ class Telegram:
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    async def _botUnbanCommand(self, update: Update, context: CallbackContext) -> None:
+    async def _botUnbanCommand(self, update: Update, context: ContextTypes) -> None:
         chat_id = update.effective_chat.id
         message = ""
 
@@ -571,7 +571,7 @@ class Telegram:
     #  must be set to "False"
 
     async def _botTextMessageReceived(
-        self, update: Update, context: CallbackContext
+        self, update: Update, context: ContextTypes
     ) -> None:
         """Send a random dog bark when a text message is received.
 
@@ -645,55 +645,31 @@ class Telegram:
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-    async def _botError(self, update: Update, context: CallbackContext) -> None:
-        """Log errors caused by updates.
+    async def _errorHandler(self, update: Update, context: ContextTypes):
+        """Send a message to admins whenever an error is raised."""
+        error_string = str(context.error)
+        update_string = str(update)
+        time_string = datetime.now().isoformat(sep=" ")
 
-        Callback fired whenever a text message is sent
-        Callback fired by errors and handled by telegram module
-        """
-        logging.error(f"Exception while handling an update: {context.error}")
         tb_list = traceback.format_exception(
             None, context.error, context.error.__traceback__
         )
-        logging.error(f"Traceback: {''.join(tb_list)}")
+        tb_string = " ".join(tb_list)
 
-        logging.error(context.error)
+        messages = [
+            f"Error at time: {time_string}\n",
+            f"Error raised: {error_string}\n",
+            f"Update: {update_string}",
+            f"Traceback:\n{tb_string}",
+        ]
 
-        message = "*ERROR RAISED*"
-        # admin message
-        for chat_id in self._admins:
-            # HECC
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                disable_web_page_preview=True,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
+        for chat_id in self._settings["admins"]:
+            for message in messages:
+                await self._application.bot.send_message(
+                    chat_id=chat_id,
+                    text=self._escapeMarkdown(message),
+                )
 
-        error_string = str(context.error)
-        time_string = datetime.now().isoformat()
-
-        message = (
-            f"Error at time: {time_string}\n"
-            f"Error raised: {error_string}\n"
-            f"Update: {update}"
-        )
-
-        for chat_id in self._admins:
-            await context.bot.send_message(chat_id=chat_id, text=message)
-
-        # user message
-        if update:
-            # we want to skip this message if the error wasn't triggered by
-            #   an update
-            chat_id = update.effective_chat.id
-            message = (
-                "_Oh h*ck, the bot is doing a splish splosh_\n" "*Please try again*"
-            )
-
-            await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
-            )
-
-        # logs to file
-        logging.error(f"Update {update} caused error {context.error}")
+        # log to file
+        logging.error(f"Update {update} caused error {context.error}.")
+        logging.error(f"Traceback:\n{tb_string}")
