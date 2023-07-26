@@ -12,7 +12,7 @@ def main(argv: list[str]):
     if "--debug" in argv:
         level = logging.DEBUG
     else:
-        level = logging.WARNING
+        level = logging.INFO
 
     logging.basicConfig(
         filename=__file__.replace(".py", ".log"),
