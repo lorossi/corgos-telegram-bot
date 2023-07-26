@@ -22,13 +22,13 @@ import ujson
 from telegram import Update, constants
 from telegram.ext import (
     Application,
-    ContextTypes,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters,
 )
 
-from modules.reddit import Reddit, EmptyQueueException
+from modules.reddit import Reddit
 
 
 class Telegram:
@@ -136,9 +136,19 @@ class Telegram:
         # bot start notification
         self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")
         # load posts for the first time
-        self._jobqueue.run_once(self._loadPosts, when=0, name="load_posts")
+        self._jobqueue.run_once(
+            self._loadPosts,
+            when=0,
+            name="load_posts",
+            job_kwargs={"misfire_grace_time": 60},
+        )
         # preload the username for faster access
-        self._jobqueue.run_once(self._preloadUsername, when=0, name="preload_username")
+        self._jobqueue.run_once(
+            self._preloadUsername,
+            when=0,
+            name="preload_username",
+            job_kwargs={"misfire_grace_time": 60},
+        )
 
         # load fresh corgos on set days
         self._jobqueue.run_daily(
@@ -265,8 +275,10 @@ class Telegram:
 
     async def _preloadUsername(self, _: ContextTypes) -> None:
         # load the bot username
+        logging.info("Preloading bot username.")
         me = await self._application.bot.get_me()
         self._bot_username = "@" + me.username
+        logging.info(f"Bot username is {self._bot_username}")
 
     async def _botStartCommand(self, update: Update, context: ContextTypes) -> None:
         """Greet the user when /start is called.
@@ -350,8 +362,21 @@ class Telegram:
                 "_The bot is currently out of corgos!_\n_Wait a bit and try again._"
             )
             await context.bot.send_message(
-                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
+                chat_id=chat_id,
+                text=message,
+                parse_mode=constants.ParseMode.MARKDOWN,
             )
+
+            if not self._reddit.is_loading:
+                # if the bot is not already loading, we want to load posts
+                #   asynchronously
+                self._jobqueue.run_once(
+                    self._loadPosts,
+                    when=0,
+                    name="load_posts",
+                    job_kwargs={"misfire_grace_time": 60},
+                )
+
             return
 
         if randint(1, 1000) == 1:
@@ -667,7 +692,7 @@ class Telegram:
             for message in messages:
                 await self._application.bot.send_message(
                     chat_id=chat_id,
-                    text=self._escapeMarkdown(message),
+                    text=message,
                 )
 
         # log to file

@@ -27,6 +27,7 @@ class Reddit:
     _praw_requests_semaphore: asyncio.Semaphore
     _http_requests_semaphore: asyncio.Semaphore
     _reddit: asyncpraw.Reddit
+    _is_loading: bool = False
 
     _settings: dict[str, str | int]
     _settings_path: str = "settings.json"
@@ -254,6 +255,7 @@ class Reddit:
         # empty the queue
         await self._temp_queue_lock.acquire()
         self._temp_queue = []
+        self._is_loading = True
         self._temp_queue_lock.release()
 
         # load subreddits
@@ -276,6 +278,7 @@ class Reddit:
         self._queue = self._temp_queue.copy()
         shuffle(self._queue)
         self._temp_queue = []
+        self._is_loading = False
         self._temp_queue_lock.release()
         self._queue_lock.release()
 
@@ -341,3 +344,8 @@ class Reddit:
 
         logging.debug(f"Queue size is {size}")
         return size
+
+    @property
+    def is_loading(self) -> bool:
+        """Return True if the queue is being loaded, False otherwise."""
+        return self._is_loading
