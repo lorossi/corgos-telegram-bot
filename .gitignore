@@ -3,3 +3,4 @@ settings.json
 .venv
 __pycache__
 *.log
+*.egg-info
