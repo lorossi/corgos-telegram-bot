@@ -1,6 +1,4 @@
-"""
-Corgos BOT, a fully functional Telegram image bot where all the photos
-  are stolen from Reddit.
+"""Corgos BOT, a fully functional Telegram image bot where all the photos are stolen from Reddit.
 
 Contact him on telegram @corgos_bot (direct url: t.me/corgos_bot)
 This bot DOES NOT LOG every chat and user. As such, it cannot
@@ -32,8 +30,7 @@ from modules.reddit import Reddit
 
 
 class Telegram:
-    """This class contains all the methods and variables needed to
-    control the Telegram bot."""
+    """This class contains all the methods and variables needed to control the Telegram bot."""
 
     _settings: dict[str, str | int | list[str]]
     _settings_path: str = "settings.json"
@@ -433,7 +430,7 @@ class Telegram:
 
         username = self._escapeMarkdown(self._bot_username)
         message = (
-            f"*Maybe you too will be blessed by this elusive good boi!*\n" f"{username}"
+            f"*Maybe you too will be blessed by this elusive good boi!*\n{username}"
         )
 
         await context.bot.send_message(
@@ -480,10 +477,7 @@ class Telegram:
                     text=message,
                     parse_mode=constants.ParseMode.MARKDOWN,
                 )
-                log = (
-                    f"Error while sending checking golden corgo. "
-                    f"Url {url} Error {e}"
-                )
+                log = f"Error while sending checking golden corgo. Url {url} Error {e}"
                 logging.error(log)
                 raise Exception(f"Url {url} is not a valid golden corgo url!")
 
