@@ -73,7 +73,7 @@ There you go! Your very own corgi-spamming-machine is up and running!
 
 ## Licensing
 
-I provide the code under the *Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)* as it is also stated in the code.
+I provide the code under the *MIT License* as it is also stated in the code.
 
 I every picture belongs to their rightfully owner. I do not claim to own any of these.
 

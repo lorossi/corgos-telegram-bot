@@ -6,7 +6,8 @@ This bot DOES NOT LOG every chat and user. As such, it cannot
 Made by Lorenzo Rossi, 2019. Grazie a Giorgia per l'idea.
 This code is surprisingly fully PEP8 compliant.
 Yeah, I'm about as surprised as you.
-License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+
+MIT License - 2025, Lorenzo Rossi
 """
 
 import logging
