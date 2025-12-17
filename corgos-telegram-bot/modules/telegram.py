@@ -125,10 +125,30 @@ class Telegram:
 
     # Public methods
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the bot."""
         self._application = Application.builder().token(self._settings["token"]).build()
 
+        # setup the job queue
+        await self._setupJobQueue()
+
+        # add command handlers
+        await self._setupHandlers()
+
+        # Log in into reddit
+        await self._reddit.login()
+
+        # start the application
+        await self._startApplication()
+        logging.info("Bot started")
+
+    async def stop(self) -> None:
+        """Stop the bot."""
+        await self._stopApplication()
+        await self._reddit.stop()
+        logging.info("Bot stopped")
+
+    async def _setupJobQueue(self) -> None:
         self._jobqueue = self._application.job_queue
 
         # bot start notification
@@ -156,6 +176,7 @@ class Telegram:
             name="load_posts",
         )
 
+    async def _setupHandlers(self) -> None:
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
         self._application.add_error_handler(self._errorHandler)
@@ -182,12 +203,17 @@ class Telegram:
             )
         )
 
-        # Log in into reddit
-        self._reddit.login()
+    async def _startApplication(self) -> None:
+        """Start the application."""
+        await self._application.initialize()
+        await self._application.updater.start_polling()
+        await self._application.start()
 
-        # blocking instructions
-        self._application.run_polling()
-        logging.info("Bot started")
+    async def _stopApplication(self) -> None:
+        """Stop the application."""
+        await self._application.updater.stop()
+        await self._application.stop()
+        await self._application.shutdown()
 
     # Setters and getters
 
@@ -306,9 +332,9 @@ class Telegram:
             )
             # save settings just in case
             self._saveSettings()
-            await self._application.stop()
             logging.warning(f"Stopped by chat id {chat_id}")
-            os._exit(0)
+            await self._stopApplication()
+            sys.exit(0)
 
         else:
             message = "*This command is for moderators only*"

@@ -164,23 +164,6 @@ class Reddit:
             logging.error(f"Cannot open url {url}, error {e}")
             return None
 
-    # Public methods
-
-    def login(self) -> None:
-        """Log into reddit.
-
-        User authentication details are loaded from settings file.
-        """
-        logging.info("Logging into Reddit")
-
-        self._reddit = asyncpraw.Reddit(
-            client_id=self._settings["client_id"],
-            client_secret=self._settings["client_secret"],
-            user_agent=self._settings["user_agent"],
-        )
-
-        logging.debug("Logged into Reddit")
-
     async def _scrapePost(
         self,
         submission: Submission,
@@ -240,6 +223,28 @@ class Reddit:
 
             return True
 
+    # Public methods
+    async def login(self) -> None:
+        """Log into reddit.
+
+        User authentication details are loaded from settings file.
+        """
+        logging.info("Logging into Reddit")
+
+        self._reddit = asyncpraw.Reddit(
+            client_id=self._settings["client_id"],
+            client_secret=self._settings["client_secret"],
+            user_agent=self._settings["user_agent"],
+        )
+
+        logging.debug("Logged into Reddit")
+
+    async def stop(self) -> None:
+        """Stop the Reddit interface."""
+        logging.info("Stopping Reddit interface")
+        await self._reddit.close()
+        logging.info("Reddit interface stopped")
+
     async def loadPostsAsync(self) -> None:
         """Load all image posts from the needed subreddit.
 
@@ -296,8 +301,9 @@ class Reddit:
         logging.info("Getting next image from queue")
         queue_size = await self.getQueueSize()
         if queue_size == 0:
-            logging.warning("Queue is empty. Trying temporary queue")
-            raise EmptyQueueException
+            error_msg = "Queue is empty"
+            logging.error(error_msg)
+            raise EmptyQueueException(error_msg)
 
         url = await self._rotateQueue()
         logging.info(f"Next image is {url}")
