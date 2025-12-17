@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools >= 80.9.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "corgos-telegram-bot"
+version = "1.0.0"
+description = "A fully functional Telegram image bot where all the photos are stolen from Reddit."
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+  "asyncpraw==7.8.0",
+  "python-telegram-bot[job-queue]==21.9",
+  "ujson==5.10.0",
+  "aiohttp==3.11.10",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/lorossi/corgos-telegram-bot"
+"Repository" = "https://github.com/lorossi/corgos-telegram-bot"
+
+
+[project.optional-dependencies]
+dev = ["ruff"]
+test = ["pytest"]
+
+[tool.ruff.lint]
+preview = true                                   # needed for "DOC" rules
+exclude = ["venv", "__pycache__", "__init__.py"]
+select = ["D", "E", "W", "F", "ANN", "DOC"]
+ignore = ["ANN401"]                              # ignore "Any" type
+unfixable = ["F401"]                             # do not fix unused imports
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["corgos_telegram_bot"]
+omit = [
+  "integration_tests/**", # exclude all test files
+  "**/__init__.py",       # exclude any __init__.py
+  "**/__version__.py",    # exclude version file
+]
+
+[tool.coverage.report]
+omit = ["tests/**", "**/__init__.py"]
