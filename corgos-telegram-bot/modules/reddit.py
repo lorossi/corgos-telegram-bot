@@ -2,26 +2,24 @@
 
 import asyncio
 import logging
+from queue import Queue
 from random import shuffle
 
+import aiohttp
 import asyncpraw
 import ujson
 from asyncpraw.models import Submission
-import aiohttp
 
 
 class EmptyQueueException(Exception):
     """Exception raised when the queue is empty."""
 
-    pass
-
 
 class Reddit:
-    """This class contains all the methods and variables needed to load the
-    urls of the pictures from reddit."""
+    """This class contains all the methods and variables needed to load the urls of the pictures from reddit."""
 
-    _queue: list[str]
-    _temp_queue: list[str]
+    _queue: Queue[str]
+    _temp_queue: set[str]
     _queue_lock: asyncio.Lock
     _temp_queue_lock: asyncio.Lock
     _praw_requests_semaphore: asyncio.Semaphore
@@ -37,8 +35,8 @@ class Reddit:
         """Initialize the Reddit interface."""
         logging.info("Initializing Reddit interface")
         # create the queues
-        self._queue = []
-        self._temp_queue = []
+        self._queue = Queue()
+        self._temp_queue = set()
 
         # load settings
         self._loadSettings()
@@ -236,9 +234,8 @@ class Reddit:
             for url in scraped_urls:
                 # if it's a valid image, we add it to the queue
                 logging.debug(f"Adding {url} to list")
-                await self._temp_queue_lock.acquire()
-                self._temp_queue.append(url)
-                self._temp_queue_lock.release()
+                async with self._temp_queue_lock:
+                    self._temp_queue.add(url)
                 logging.info(f"Added {url} to list")
 
             return True
@@ -253,10 +250,9 @@ class Reddit:
         """
         logging.info("Loading posts from Reddit")
         # empty the queue
-        await self._temp_queue_lock.acquire()
-        self._temp_queue = []
-        self._is_loading = True
-        self._temp_queue_lock.release()
+        async with self._temp_queue_lock:
+            self._temp_queue = set()
+            self._is_loading = True
 
         # load subreddits
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
@@ -275,16 +271,22 @@ class Reddit:
         # shuffle the queue and empty the temporary queue
         await self._queue_lock.acquire()
         await self._temp_queue_lock.acquire()
-        self._queue = self._temp_queue.copy()
-        shuffle(self._queue)
-        self._temp_queue = []
+
+        shuffled_queue = list(self._temp_queue)
+        shuffle(shuffled_queue)
+
+        self._queue = Queue(len(self._temp_queue))
+        for url in shuffled_queue:
+            self._queue.put(url)
+
         self._is_loading = False
+
         self._temp_queue_lock.release()
         self._queue_lock.release()
 
         # return the number of posts loaded
-        logging.info(f"Loaded {len(self._queue)} posts from Reddit")
-        return len(self._queue)
+        logging.info(f"Loaded about {self._queue.qsize()} posts from Reddit")
+        return self._queue.qsize()
 
     async def getUrl(self) -> str:
         """Return the url of the next image in the queue."""
@@ -308,9 +310,13 @@ class Reddit:
             url (str): url to be removed
         """
         logging.debug(f"Removing url {url} from queue")
-        await self._queue_lock.acquire()
-        self._queue.remove(url)
-        self._queue_lock.release()
+        async with self._queue_lock:
+            temp_queue = Queue(len(self._queue))
+            while not self._queue.empty():
+                current_url = self._queue.get()
+                if current_url != url:
+                    temp_queue.put(current_url)
+            self._queue = temp_queue
 
     async def _rotateQueue(self) -> str:
         """Rotate the queue and return the next url.
@@ -319,10 +325,12 @@ class Reddit:
             str: next url
         """
         logging.debug("Rotating queue")
-        await self._queue_lock.acquire()
-        url = self._queue[0]
-        self._queue.append(self._queue.pop(0))
-        self._queue_lock.release()
+
+        async with self._queue_lock:
+            url = self._queue.get()
+            self._queue.put(url)
+
+        logging.debug(f"Next url is {url}")
         return url
 
     async def getTempQueueSize(self) -> int:
@@ -338,9 +346,8 @@ class Reddit:
     async def getQueueSize(self) -> int:
         """Return the size of the queue."""
         logging.debug("Getting queue size")
-        await self._queue_lock.acquire()
-        size = len(self._queue)
-        self._queue_lock.release()
+        async with self._queue_lock:
+            size = self._queue.qsize()
 
         logging.debug(f"Queue size is {size}")
         return size
