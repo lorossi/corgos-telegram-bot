@@ -44,7 +44,7 @@ source = ["corgos_telegram_bot"]
 omit = [
   "integration_tests/**", # exclude all test files
   "**/__init__.py",       # exclude any __init__.py
-  "**/__version__.py",    # exclude version file
+  "scripts/tests/**",     # exclude all test files
 ]
 
 [tool.coverage.report]
