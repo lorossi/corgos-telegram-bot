@@ -1,0 +1,3 @@
+corgo - When you just need a corgo
+goldencorgo - Read the tale of the legendary Golden Corgo...
+stats - Get some (mostly useless) information about the bot.
