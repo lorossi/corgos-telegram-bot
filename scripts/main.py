@@ -16,7 +16,7 @@ async def main(argv: list[str]):
         level = logging.DEBUG
         filename = None
     else:
-        level = logging.INFO
+        level = logging.WARNING
         filename = __file__.replace(".py", ".log")
 
     logging.basicConfig(
@@ -36,9 +36,11 @@ async def main(argv: list[str]):
 
     while True:
         try:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
         except (KeyboardInterrupt, asyncio.CancelledError):
-            logging.info("KeyboardInterrupt received, stopping the bot...")
+            msg = "Received exit signal, stopping the bot..."
+            logging.info(msg)
+            print(msg)
             break
 
     await t.stop()
