@@ -23,7 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff"]
-test = ["pytest"]
+test = ["pytest", "pytest-cov"]
 
 [tool.ruff.lint]
 preview = true                                   # needed for "DOC" rules
