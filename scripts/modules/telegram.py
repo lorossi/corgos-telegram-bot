@@ -26,25 +26,30 @@ from telegram.ext import (
     filters,
 )
 
-from modules.reddit import Reddit
-from modules.settings import Settings
+from scripts.modules.reddit import Reddit
+from scripts.modules.settings import Settings
 
 
 class Telegram:
     """This class contains all the methods and variables needed to control the Telegram bot."""
 
+    _bot_username: str
+    _settings_path: str
     _settings: Settings
-    _settings_path: str = "settings.json"
     _reddit: Reddit
 
-    def __init__(self) -> None:
-        """Init the bot, loading the settings as well."""
+    def __init__(self, settings_path: str = "settings.json") -> None:
+        """Initialize the Telegram bot.
+
+        Args:
+            settings_path (str): path to the settings file
+        """
+        logging.info("Initializing Telegram bot")
         self._settings = {}
-        self._settings_path = "settings.json"
+        self._settings_path = settings_path
         # create a Reddit handler
-        self._reddit = Reddit()
-        # preload the username for faster access
-        self._bot_username = None
+        self._reddit = Reddit(settings_path=settings_path)
+        logging.info("Telegram bot initialized")
 
     # Private methods
 

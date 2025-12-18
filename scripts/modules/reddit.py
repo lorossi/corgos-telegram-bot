@@ -9,7 +9,7 @@ import aiohttp
 import asyncpraw
 from asyncpraw.models import Submission
 
-from modules.settings import Settings
+from scripts.modules.settings import Settings
 
 
 class EmptyQueueException(Exception):
@@ -26,21 +26,24 @@ class Reddit:
     _praw_requests_semaphore: asyncio.Semaphore
     _http_requests_semaphore: asyncio.Semaphore
     _reddit: asyncpraw.Reddit
-    _is_loading: bool = False
+    _is_loading: bool
 
     _settings: dict[str, str | int]
-    _settings_path: str = "settings.json"
+    _settings_path: str
     _image_formats: tuple[str] = ("image/png", "image/jpeg")
 
-    def __init__(self) -> None:
+    def __init__(self, settings_path: str = "settings.json") -> None:
         """Initialize the Reddit interface."""
         logging.info("Initializing Reddit interface")
+        self._settings_path = settings_path
         # create the queues
         self._queue = Queue()
         self._temp_queue = set()
         # create a lock for the new queue
         self._queue_lock = asyncio.Lock()
         self._temp_queue_lock = asyncio.Lock()
+        # Initialize loading state
+        self._is_loading = False
         logging.info("Reddit interface initialized")
 
     # Private methods
