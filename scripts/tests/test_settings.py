@@ -221,3 +221,11 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value, [1, 3])
         value = await settings.get("numbers")
         self.assertEqual(value, [1, 3])
+
+    async def testApplyNonExistentKey(self):
+        """Test applying a function to a non-existent key raises KeyError."""
+        test_path = await self.createSettingsFile(self.expected_content)
+        settings = Settings(path=test_path)
+        await settings.load()
+        with self.assertRaises(KeyError):
+            await settings.apply("non_existent_key", lambda x: x)
