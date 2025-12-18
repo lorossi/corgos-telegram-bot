@@ -17,7 +17,6 @@ import traceback
 from datetime import datetime, time
 from random import choice, randint
 
-import ujson
 from telegram import Update, constants
 from telegram.ext import (
     Application,
@@ -28,12 +27,13 @@ from telegram.ext import (
 )
 
 from modules.reddit import Reddit
+from modules.settings import Settings
 
 
 class Telegram:
     """This class contains all the methods and variables needed to control the Telegram bot."""
 
-    _settings: dict[str, str | int | list[str]]
+    _settings: Settings
     _settings_path: str = "settings.json"
     _reddit: Reddit
 
@@ -41,76 +41,12 @@ class Telegram:
         """Init the bot, loading the settings as well."""
         self._settings = {}
         self._settings_path = "settings.json"
-        # load all the settings
-        self._loadSettings()
         # create a Reddit handler
         self._reddit = Reddit()
         # preload the username for faster access
         self._bot_username = None
 
     # Private methods
-
-    def _loadSettings(self) -> None:
-        """Load settings from the settings file."""
-        with open(self._settings_path) as json_file:
-            # only keeps settings for Telegram, discarding others
-            self._settings = ujson.load(json_file)["Telegram"]
-
-        # on which days the corgos will be fetched. Must be converted to tuple
-        #   since JSON only supports arrays. 0 for monday through 6 for sunday
-        self._load_days = tuple(self._settings["load_days"])
-
-        # load time expressed in minutes after midnight (GMT time)
-        self._load_time = time(
-            minute=self._settings["load_time"] % 60,
-            hour=int(self._settings["load_time"] / 60),
-        )
-
-    def _saveSettings(self) -> None:
-        """Save settings into file."""
-        with open(self._settings_path) as json_file:
-            old_settings = ujson.load(json_file)
-
-        # since settings is a dictionary, we update the settings loaded
-        # with the current settings dict
-        old_settings["Telegram"].update(self._settings)
-
-        with open(self._settings_path, "w") as outfile:
-            ujson.dump(old_settings, outfile, indent=2)
-
-    def _updateCorgosSent(self) -> None:
-        """Update number of corgos sent and save to file."""
-        self._corgos_sent += 1
-        self._settings["corgos_sent"] = self._corgos_sent
-        self._saveSettings()
-
-    def _addToBanned(self, chat_id: int) -> None:
-        """Add a chat_id to the banned list.
-
-        Args:
-            chat_id (int): id of the chat to ban
-        """
-        if len(self._banned_chats) > 0:
-            # list already exists
-            already_banned = self._banned_chats
-            already_banned.append(chat_id)
-            self._settings["banned"] = list(set(self._settings["banned"]))
-        else:
-            # list doesn't exist yet
-            self._banned_chats = [chat_id]
-        # save to file
-        self._saveSettings()
-
-    def _removeFromBanned(self, chat_id: int) -> None:
-        """Remove a chat_id from the banned list.
-
-        Args:
-            chat_id (int): chat_id
-        """
-        if chat_id in self._settings["banned"]:
-            self._settings["banned"].remove(chat_id)
-        # save to file
-        self._saveSettings()
 
     def _escapeMarkdown(self, text: str) -> str:
         """Escape markdown characters in a text.
@@ -127,16 +63,27 @@ class Telegram:
 
     async def start(self) -> None:
         """Start the bot."""
-        self._application = Application.builder().token(self._settings["token"]).build()
+        self._settings = Settings(self._settings_path)
+        await self._settings.load()
+
+        # on which days the corgos will be fetched. Must be converted to tuple
+        #   since JSON only supports arrays. 0 for monday through 6 for sunday
+        load_days = await self._settings.get("telegram_load_days", lambda x: tuple(x))
+        load_time = await self._settings.get(
+            "telegram_load_time", lambda x: time(minute=x % 60, hour=int(x / 60))
+        )
+        token = await self._settings.get("telegram_token")
+
+        self._application = Application.builder().token(token).build()
 
         # setup the job queue
-        await self._setupJobQueue()
+        await self._setupJobQueue(load_time, load_days)
 
         # add command handlers
         await self._setupHandlers()
 
         # Log in into reddit
-        await self._reddit.login()
+        await self._reddit.start()
 
         # start the application
         await self._startApplication()
@@ -146,9 +93,10 @@ class Telegram:
         """Stop the bot."""
         await self._stopApplication()
         await self._reddit.stop()
+        await self._settings.save()
         logging.info("Bot stopped")
 
-    async def _setupJobQueue(self) -> None:
+    async def _setupJobQueue(self, load_time: int, load_days: tuple[int]) -> None:
         self._jobqueue = self._application.job_queue
 
         # bot start notification
@@ -171,8 +119,8 @@ class Telegram:
         # load fresh corgos on set days
         self._jobqueue.run_daily(
             self._loadPosts,
-            days=self._load_days,
-            time=self._load_time,
+            days=load_days,
+            time=load_time,
             name="load_posts",
         )
 
@@ -215,46 +163,10 @@ class Telegram:
         await self._application.stop()
         await self._application.shutdown()
 
-    # Setters and getters
-
-    @property
-    def _admins(self) -> list[int]:
-        return self._settings["admins"]
-
-    @property
-    def _corgos_sent(self) -> int:
-        return self._settings["corgos_sent"]
-
-    @_corgos_sent.setter
-    def _corgos_sent(self, value: int) -> None:
-        self._settings["corgos_sent"] = value
-        self._saveSettings()
-
-    @property
-    def _start_date(self) -> datetime:
-        return self._settings["start_date"]
-
-    @property
-    def _golden_corgos_found(self) -> int:
-        return self._settings["golden_corgos_found"]
-
-    @_golden_corgos_found.setter
-    def _golden_corgos_found(self, value):
-        self._settings["golden_corgos_found"] = value
-        self._saveSettings()
-
-    @property
-    def _golden_corgo_url(self) -> str:
-        return self._settings["golden_corgo_url"]
-
-    @property
-    def _banned_chats(self) -> list[int]:
-        return self._settings["banned"]
-
-    @_banned_chats.setter
-    def _banned_chats(self, chats: list[int]) -> None:
-        self._settings["banned"] = list(set(chats))
-        self._saveSettings()
+    async def _getAdmins(self) -> list[int]:
+        """Get the list of admin chat ids."""
+        admins = await self._settings.get("telegram_admins")
+        return admins
 
     # Callbacks
 
@@ -264,7 +176,8 @@ class Telegram:
         Callback fired at startup from JobQueue
         """
         message = "*Bot started*"
-        for chat_id in self._admins:
+        admins = await self._getAdmins()
+        for chat_id in admins:
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
@@ -277,7 +190,8 @@ class Telegram:
         logging.info("Loading posts asynchronously.")
 
         message = "_Posts are now being loaded..._"
-        for chat_id in self._admins:
+        admins = await self._getAdmins()
+        for chat_id in admins:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
@@ -289,7 +203,7 @@ class Telegram:
         logging.info(f"Downloaded {posts} posts from Reddit.")
 
         message = f"_{posts} posts have been loaded._"
-        for chat_id in self._admins:
+        for chat_id in admins:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
@@ -325,7 +239,8 @@ class Telegram:
         """
         chat_id = update.effective_chat.id
 
-        if chat_id in self._admins:
+        admins = await self._getAdmins()
+        if chat_id in admins:
             message = "_Bot stopped_"
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
@@ -349,8 +264,8 @@ class Telegram:
         Hidden command as it's not the in command list
         """
         chat_id = update.effective_chat.id
-
-        if chat_id in self._admins:
+        admins = await self._getAdmins()
+        if chat_id in admins:
             message = "_Resetting..._"
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
@@ -369,11 +284,11 @@ class Telegram:
         await context.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
-
-        if chat_id in self._banned_chats:
+        banned_chats = await self._settings.get("telegram_banned")
+        if chat_id in banned_chats:
             message = (
                 "*You have been banned by the bot.*"
-                "nThink about your past mistakes. nn_Hecc_."
+                "\nThink about your past mistakes. \n\n_Hecc_."
             )
             await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
@@ -405,7 +320,11 @@ class Telegram:
 
         if randint(1, 1000) == 1:
             # if we are lucky enough, we get a golden corgo!
-            url = self._golden_corgo_url
+            url = await self._settings.get("telegram_golden_corgo_url")
+            await self._settings.apply(
+                "telegram_golden_corgos_found",
+                lambda x: x + 1,
+            )
             message = "\n*GOLDEN CORGO FOUND!*"
         else:
             # otherwise we get a normal corgo
@@ -413,7 +332,10 @@ class Telegram:
             message = self._escapeMarkdown(self._bot_username)
 
         # increase the corgo counter
-        self._corgos_sent += 1
+        await self._settings.apply(
+            "telegram_corgos_sent",
+            lambda x: x + 1,
+        )
 
         # send the corgo to the user
         await context.bot.send_photo(
@@ -443,11 +365,13 @@ class Telegram:
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
 
+        golden_corgos_found = await self._settings.get("telegram_golden_corgos_found")
+
         message = (
             f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
             f"All we know is that if you are lucky enough, once in maybe "
             f"1000 corgos you might find one. \n"
-            f"_So far, {self._golden_corgos_found} have been found "
+            f"_So far, {golden_corgos_found} have been found "
             f"roaming this bot..._"
         )
 
@@ -474,9 +398,9 @@ class Telegram:
         """
         chat_id = update.effective_chat.id
 
-        if chat_id in self._admins:
-            url = self._golden_corgo_url
-
+        admins = await self._getAdmins()
+        url = await self._settings.get("telegram_golden_corgo_url")
+        if chat_id in admins:
             # we want to get the "small" image in order to make this
             # whole process  slightly faster. imgur provides different
             # image sizes by editing its url a bit
@@ -531,19 +455,25 @@ class Telegram:
         )
 
         # bot started date
-        d1 = datetime.fromisoformat(self._settings["start_date"])
+        d1 = await self._settings.get(
+            "telegram_start_date",
+            lambda x: datetime.fromisoformat(x),
+        )
         # today's date
         d2 = datetime.now()
         days_between = (d2 - d1).days + 1
         # Average number of corgos sent per day
-        average = int(self._corgos_sent / days_between)
+        corgos_sent = await self._settings.get("telegram_corgos_sent")
+        average = int(corgos_sent / days_between)
+        # golden corgos found
+        golden_corgos_found = await self._settings.get("telegram_golden_corgos_found")
 
         message = (
             f"The bot has been running for *{days_between}* days.\n"
-            f"*{self._corgos_sent}* photos have been sent, "
+            f"*{corgos_sent}* photos have been sent, "
             f"averaging *{average}* corgos per day!"
             f" _{choice(['ARF', 'WOFF', 'BORK', 'RUFF'])}_!\n"
-            f"*{self._golden_corgos_found}* golden corgos were found!"
+            f"*{golden_corgos_found}* golden corgos were found!"
         )
 
         await context.bot.send_message(
@@ -575,12 +505,16 @@ class Telegram:
         chat_id = update.effective_chat.id
         message = ""
 
-        if chat_id in self._admins:
+        admins = await self._getAdmins()
+        banned = await self._settings.get("telegram_banned")
+        if chat_id in admins:
             for arg in context.args:
-                self._addToBanned(int(arg))
+                banned.append(int(arg))
 
-            if len(self._banned_chats) > 0:
-                message = "_Ban list_: " + ", ".join(str(b) for b in self._banned_chats)
+            await self._settings.set("telegram_banned", sorted(set(banned)))
+            banned_chats = await self._settings.get("telegram_banned")
+            if len(banned_chats) > 0:
+                message = "_Ban list_: " + ", ".join(str(b) for b in banned_chats)
             else:
                 message = "_Ban list is empty_"
 
@@ -595,9 +529,13 @@ class Telegram:
         chat_id = update.effective_chat.id
         message = ""
 
-        if chat_id in self._admins:
+        admins = await self._getAdmins()
+        banned = await self._settings.get("telegram_banned")
+        if chat_id in admins:
             for arg in context.args:
-                self._removeFromBanned(int(arg))
+                banned.remove(int(arg))
+
+            await self._settings.set("telegram_banned", sorted(set(banned)))
 
             message = "*Chats removed from ban list*: " + ", ".join(
                 str(a) for a in context.args
@@ -709,7 +647,8 @@ class Telegram:
             f"Traceback:\n{tb_string}",
         ]
 
-        for chat_id in self._settings["admins"]:
+        admins = await self._getAdmins()
+        for chat_id in admins:
             for message in messages:
                 await self._application.bot.send_message(
                     chat_id=chat_id,

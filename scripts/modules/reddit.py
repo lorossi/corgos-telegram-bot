@@ -10,6 +10,8 @@ import asyncpraw
 import ujson
 from asyncpraw.models import Submission
 
+from modules.settings import Settings
+
 
 class EmptyQueueException(Exception):
     """Exception raised when the queue is empty."""
@@ -37,54 +39,12 @@ class Reddit:
         # create the queues
         self._queue = Queue()
         self._temp_queue = set()
-
-        # load settings
-        self._loadSettings()
-
-        # create a semaphore for the reddit requests
-        self._praw_requests_semaphore = asyncio.Semaphore(
-            self._settings["concurrent_requests"]
-        )
-        # create a semaphore for the http requests
-        self._http_requests_semaphore = asyncio.Semaphore(
-            self._settings["concurrent_requests"]
-        )
         # create a lock for the new queue
         self._queue_lock = asyncio.Lock()
         self._temp_queue_lock = asyncio.Lock()
         logging.info("Reddit interface initialized")
 
     # Private methods
-
-    def _loadSettings(self) -> None:
-        """Load settings from the settings file.
-
-        Unless differently specified during the instantiation,
-        the default settings path is used.
-        """
-        logging.debug("Loading settings")
-        with open(self._settings_path) as json_file:
-            # only keeps settings for Reddit, discarding others
-            self._settings = ujson.load(json_file)["Reddit"]
-        logging.debug("Settings loaded")
-
-    def _saveSettings(self) -> None:
-        """Save settings in the settings file.
-
-        Unless differently specified during the instantiation,
-        the default settings path is used.
-        """
-        logging.debug("Saving settings")
-        with open(self._settings_path) as json_file:
-            old_settings = ujson.load(json_file)
-
-        # since settings is a dictionary, we update the settings loaded
-        # with the current settings dict
-        old_settings["Reddit"].update(self._settings)
-
-        with open(self._settings_path, "w") as outfile:
-            ujson.dump(old_settings, outfile, indent=2)
-        logging.debug("Settings saved")
 
     async def _asyncRequest(self, url: str) -> aiohttp.ClientResponse:
         """Make an async request to the specified url.
@@ -167,6 +127,7 @@ class Reddit:
     async def _scrapePost(
         self,
         submission: Submission,
+        min_score: int = 5,
     ) -> bool:
         """Scrape a post from Reddit and add it to the temporary queue.
 
@@ -188,10 +149,10 @@ class Reddit:
                 return False
 
             # skip posts that have a low score
-            if submission.score < self._settings["min_score"]:
+            if submission.score < min_score:
                 logging.warning(
                     f"Skipping post {submission.url} due to low score "
-                    f"({submission.score}, min {self._settings['min_score']})"
+                    f"({submission.score}, min {min_score})"
                 )
                 return False
 
@@ -224,25 +185,37 @@ class Reddit:
             return True
 
     # Public methods
-    async def login(self) -> None:
-        """Log into reddit.
+    async def start(self) -> None:
+        """Start the Reddit interface."""
+        logging.info("Starting Reddit interface")
+        # load settings
+        self._settings = Settings(self._settings_path)
+        await self._settings.load()
 
-        User authentication details are loaded from settings file.
-        """
+        # create a semaphore for the reddit requests
+        self._praw_requests_semaphore = asyncio.Semaphore(
+            await self._settings.get("reddit_praw_concurrent_requests")
+        )
+        # create a semaphore for the http requests
+        self._http_requests_semaphore = asyncio.Semaphore(
+            await self._settings.get("reddit_http_concurrent_requests")
+        )
+
         logging.info("Logging into Reddit")
 
         self._reddit = asyncpraw.Reddit(
-            client_id=self._settings["client_id"],
-            client_secret=self._settings["client_secret"],
-            user_agent=self._settings["user_agent"],
+            client_id=await self._settings.get("reddit_client_id"),
+            client_secret=await self._settings.get("reddit_client_secret"),
+            user_agent=await self._settings.get("reddit_user_agent"),
         )
 
-        logging.debug("Logged into Reddit")
+        logging.debug("Reddit interface started")
 
     async def stop(self) -> None:
         """Stop the Reddit interface."""
         logging.info("Stopping Reddit interface")
         await self._reddit.close()
+        await self._settings.save()
         logging.info("Reddit interface stopped")
 
     async def loadPostsAsync(self) -> None:
@@ -263,11 +236,11 @@ class Reddit:
         subreddits = await self._reddit.subreddit("corgi+babycorgis")
         # create a list of tasks to be executed
         logging.debug("Creating tasks")
+        min_score = await self._settings.get("reddit_min_score")
+        posts_limit = await self._settings.get("reddit_posts_limit")
         tasks = {
-            self._scrapePost(submission)
-            async for submission in subreddits.top(
-                "week", limit=self._settings["post_limit"]
-            )
+            self._scrapePost(submission, min_score=min_score)
+            async for submission in subreddits.top("week", limit=posts_limit)
         }
         logging.debug("Executing tasks")
         # execute all the tasks and wait for them to finish
