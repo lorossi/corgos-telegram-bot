@@ -214,7 +214,6 @@ class Reddit:
         """Stop the Reddit interface."""
         logging.info("Stopping Reddit interface")
         await self._reddit.close()
-        await self._settings.save()
         logging.info("Reddit interface stopped")
 
     async def loadPostsAsync(self) -> None:
