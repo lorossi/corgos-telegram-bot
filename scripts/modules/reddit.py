@@ -7,7 +7,6 @@ from random import shuffle
 
 import aiohttp
 import asyncpraw
-import ujson
 from asyncpraw.models import Submission
 
 from modules.settings import Settings
@@ -263,7 +262,7 @@ class Reddit:
         self._queue_lock.release()
 
         # return the number of posts loaded
-        logging.info(f"Loaded about {self._queue.qsize()} posts from Reddit")
+        logging.info("Loaded about %d posts from Reddit", self._queue.qsize())
         return self._queue.qsize()
 
     async def getUrl(self) -> str:
@@ -279,7 +278,7 @@ class Reddit:
             raise EmptyQueueException(error_msg)
 
         url = await self._rotateQueue()
-        logging.info(f"Next image is {url}")
+        logging.info(f"Next image is %s", url)
         return url
 
     async def removeUrl(self, url: str) -> None:
@@ -288,7 +287,7 @@ class Reddit:
         Args:
             url (str): url to be removed
         """
-        logging.debug(f"Removing url {url} from queue")
+        logging.debug("Removing url %s from queue", url)
         async with self._queue_lock:
             temp_queue = Queue(len(self._queue))
             while not self._queue.empty():
@@ -309,7 +308,7 @@ class Reddit:
             url = self._queue.get()
             self._queue.put(url)
 
-        logging.debug(f"Next url is {url}")
+        logging.debug(f"Next url is %s", url)
         return url
 
     async def getTempQueueSize(self) -> int:
@@ -319,7 +318,7 @@ class Reddit:
         size = len(self._temp_queue)
         self._temp_queue_lock.release()
 
-        logging.debug(f"Temporary queue size is {size}")
+        logging.debug("Temporary queue size is %d", size)
         return size
 
     async def getQueueSize(self) -> int:
@@ -328,7 +327,7 @@ class Reddit:
         async with self._queue_lock:
             size = self._queue.qsize()
 
-        logging.debug(f"Queue size is {size}")
+        logging.debug(f"Queue size is %d", size)
         return size
 
     @property

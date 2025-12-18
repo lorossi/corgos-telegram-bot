@@ -199,10 +199,10 @@ class Telegram:
             )
 
         logging.info("Downloading posts from Reddit.")
-        posts = await self._reddit.loadPostsAsync()
-        logging.info(f"Downloaded {posts} posts from Reddit.")
+        posts_num = await self._reddit.loadPostsAsync()
+        logging.info("Downloaded %d posts from Reddit.", posts_num)
 
-        message = f"_{posts} posts have been loaded._"
+        message = f"_{posts_num} posts have been loaded._"
         for chat_id in admins:
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -216,7 +216,7 @@ class Telegram:
         logging.info("Preloading bot username.")
         me = await self._application.bot.get_me()
         self._bot_username = "@" + me.username
-        logging.info(f"Bot username is {self._bot_username}")
+        logging.info("Bot username is %s", self._bot_username)
 
     async def _botStartCommand(self, update: Update, context: ContextTypes) -> None:
         """Greet the user when /start is called.
@@ -247,7 +247,7 @@ class Telegram:
             )
             # save settings just in case
             self._saveSettings()
-            logging.warning(f"Stopped by chat id {chat_id}")
+            logging.warning("Stopped by chat id %d", chat_id)
             await self._stopApplication()
             sys.exit(0)
 
@@ -271,7 +271,7 @@ class Telegram:
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
 
-            logging.warning(f"Reset by chat id {chat_id}")
+            logging.warning("Reset by chat id %d", chat_id)
             # System command to reload the python script
             os.execl(sys.executable, sys.executable, *sys.argv)
 
@@ -656,5 +656,5 @@ class Telegram:
                 )
 
         # log to file
-        logging.error(f"Update {update} caused error {context.error}.")
-        logging.error(f"Traceback:\n{tb_string}")
+        logging.error("Update %s caused error %s.", update_string, error_string)
+        logging.error("Traceback:\n%s", tb_string)
