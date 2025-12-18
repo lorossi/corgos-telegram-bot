@@ -137,14 +137,14 @@ class Reddit:
             bool: True if the post is valid, False otherwise
         """
         async with self._praw_requests_semaphore:
-            logging.info(f"Loading post with url {submission.url}")
+            logging.debug(f"Loading post with url {submission.url}")
             # skip stickied posts
             if submission.stickied:
-                logging.warning(f"Skipping post {submission.url} due to stickied")
+                logging.debug(f"Skipping post {submission.url} due to stickied")
                 return False
             # skip selftext posts
             if submission.is_self:
-                logging.warning(f"Skipping post {submission.url} due to selftext")
+                logging.debug(f"Skipping post {submission.url} due to selftext")
                 return False
 
             # skip posts that have a low score
@@ -216,7 +216,7 @@ class Reddit:
         await self._reddit.close()
         logging.info("Reddit interface stopped")
 
-    async def loadPostsAsync(self) -> None:
+    async def loadPostsAsync(self) -> int:
         """Load all image posts from the needed subreddit.
 
         The links are shuffled and kept into memory.
@@ -262,72 +262,37 @@ class Reddit:
 
         # return the number of posts loaded
         logging.info("Loaded about %d posts from Reddit", self._queue.qsize())
-        return self._queue.qsize()
+        return len(shuffled_queue)
 
     async def getUrl(self) -> str:
-        """Return the url of the next image in the queue."""
-        # if somehow we did not load anything, we throw an exception
-        # this should likely never happen, but might be triggered if the queue
-        # has not been loaded yet
+        """Return the url of the next image in the queue.
+
+        Raises:
+            EmptyQueueException: if the queue is empty
+        Returns:
+            str: url of the next image
+        """
         logging.info("Getting next image from queue")
-        queue_size = await self.getQueueSize()
-        if queue_size == 0:
+        queue_empty = await self.isQueueEmpty()
+        if queue_empty:
             error_msg = "Queue is empty"
             logging.error(error_msg)
             raise EmptyQueueException(error_msg)
 
-        url = await self._rotateQueue()
-        logging.info(f"Next image is %s", url)
-        return url
-
-    async def removeUrl(self, url: str) -> None:
-        """Remove an url from the queue.
-
-        Args:
-            url (str): url to be removed
-        """
-        logging.debug("Removing url %s from queue", url)
-        async with self._queue_lock:
-            temp_queue = Queue(len(self._queue))
-            while not self._queue.empty():
-                current_url = self._queue.get()
-                if current_url != url:
-                    temp_queue.put(current_url)
-            self._queue = temp_queue
-
-    async def _rotateQueue(self) -> str:
-        """Rotate the queue and return the next url.
-
-        Returns:
-            str: next url
-        """
-        logging.debug("Rotating queue")
-
         async with self._queue_lock:
             url = self._queue.get()
             self._queue.put(url)
-
-        logging.debug(f"Next url is %s", url)
+        logging.info(f"Next image is %s", url)
         return url
 
-    async def getTempQueueSize(self) -> int:
-        """Return the size of the temporary queue."""
-        logging.debug("Getting temporary queue size")
-        await self._temp_queue_lock.acquire()
-        size = len(self._temp_queue)
-        self._temp_queue_lock.release()
-
-        logging.debug("Temporary queue size is %d", size)
-        return size
-
-    async def getQueueSize(self) -> int:
-        """Return the size of the queue."""
-        logging.debug("Getting queue size")
+    async def isQueueEmpty(self) -> bool:
+        """Return True if the queue is empty, False otherwise."""
+        logging.debug("Checking if queue is empty")
         async with self._queue_lock:
-            size = self._queue.qsize()
+            empty = self._queue.empty()
 
-        logging.debug(f"Queue size is %d", size)
-        return size
+        logging.debug(f"Queue is empty: {empty}")
+        return empty
 
     @property
     def is_loading(self) -> bool:

@@ -63,6 +63,7 @@ class Telegram:
 
     async def start(self) -> None:
         """Start the bot."""
+        logging.info("Starting bot...")
         self._settings = Settings(self._settings_path)
         await self._settings.load()
 
@@ -91,12 +92,14 @@ class Telegram:
 
     async def stop(self) -> None:
         """Stop the bot."""
+        logging.info("Stopping bot...")
         await self._stopApplication()
         await self._reddit.stop()
         await self._settings.save()
         logging.info("Bot stopped")
 
     async def _setupJobQueue(self, load_time: int, load_days: tuple[int]) -> None:
+        logging.info("Setting up job queue...")
         self._jobqueue = self._application.job_queue
 
         # bot start notification
@@ -123,8 +126,10 @@ class Telegram:
             time=load_time,
             name="load_posts",
         )
+        logging.info("Job queue set up.")
 
     async def _setupHandlers(self) -> None:
+        logging.info("Setting up handlers...")
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
         self._application.add_error_handler(self._errorHandler)
@@ -150,6 +155,7 @@ class Telegram:
                 filters.TEXT & (~filters.COMMAND), self._botTextMessageReceived
             )
         )
+        logging.info("Handlers set up.")
 
     async def _startApplication(self) -> None:
         """Start the application."""
@@ -295,7 +301,7 @@ class Telegram:
             )
             return
 
-        if await self._reddit.getQueueSize() == 0:
+        if await self._reddit.isQueueEmpty():
             # if the queue is empty, we want to notify the user
             message = (
                 "_The bot is currently out of corgos!_\n_Wait a bit and try again._"
@@ -428,9 +434,11 @@ class Telegram:
                     text=message,
                     parse_mode=constants.ParseMode.MARKDOWN,
                 )
-                log = f"Error while sending checking golden corgo. Url {url} Error {e}"
-                logging.error(log)
-                raise Exception(f"Url {url} is not a valid golden corgo url!")
+                error_msg = (
+                    f"Error while sending checking golden corgo. Url {url} Error {e}"
+                )
+                logging.error(error_msg)
+                raise Exception(error_msg) from e
 
             # we now delete the sent messages (if any) to keep the SECRET
             if to_delete:
