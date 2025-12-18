@@ -8,6 +8,7 @@ from random import shuffle
 import aiohttp
 import asyncpraw
 from asyncpraw.models import Submission
+
 from modules.settings import Settings
 
 
@@ -233,7 +234,8 @@ class Reddit:
             self._is_loading = True
 
         # load subreddits
-        subreddits = await self._reddit.subreddit("corgi+babycorgis")
+        subreddits_list = await self._settings.get("reddit_subreddits")
+        subreddits = await self._reddit.subreddit("+".join(subreddits_list))
         # create a list of tasks to be executed
         logging.debug("Creating tasks")
         min_score = await self._settings.get("reddit_min_score")
