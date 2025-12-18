@@ -14,10 +14,8 @@ async def main(argv: list[str]):
 
     if "--debug" in argv:
         level = logging.DEBUG
-        filename = None
     else:
-        level = logging.WARNING
-        filename = __file__.replace(".py", ".log")
+        level = logging.INFO
 
     logging.basicConfig(
         level=level,
@@ -25,8 +23,6 @@ async def main(argv: list[str]):
             "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s "
             "(%(lineno)d) - %(message)s"
         ),
-        filemode="w",
-        filename=filename,
     )
     # exception tracking
     tracemalloc.start()
