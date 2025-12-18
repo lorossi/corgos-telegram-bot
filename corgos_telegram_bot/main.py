@@ -10,8 +10,7 @@ from modules.telegram import Telegram
 
 async def main(argv: list[str]):
     """Start main function, setups logger and starts the bot."""
-    # we log everything into the log file
-
+    # setup logger
     if "--debug" in argv:
         level = logging.DEBUG
     else:
@@ -27,12 +26,13 @@ async def main(argv: list[str]):
     # exception tracking
     tracemalloc.start()
 
+    # start the bot
     t = Telegram()
     await t.start()
 
     while True:
         try:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1)
         except (KeyboardInterrupt, asyncio.CancelledError):
             msg = "Received exit signal, stopping the bot..."
             logging.info(msg)
