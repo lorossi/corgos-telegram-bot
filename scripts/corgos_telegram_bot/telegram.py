@@ -17,6 +17,8 @@ import traceback
 from datetime import datetime, time
 from random import choice, randint
 
+from corgos_telegram_bot.modules.reddit import Reddit
+from corgos_telegram_bot.modules.settings import Settings
 from telegram import Update, constants
 from telegram.ext import (
     Application,
@@ -25,9 +27,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-
-from scripts.modules.reddit import Reddit
-from scripts.modules.settings import Settings
 
 
 class Telegram:

@@ -8,8 +8,7 @@ from random import shuffle
 import aiohttp
 import asyncpraw
 from asyncpraw.models import Submission
-
-from scripts.modules.settings import Settings
+from corgos_telegram_bot.settings import Settings
 
 
 class EmptyQueueException(Exception):
