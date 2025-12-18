@@ -1,5 +1,16 @@
+# Ignore settings and logs
 settings.json
+*.log
+
+# VSCode settings
 .vscode
+
+# Python
 .venv
 __pycache__
-*.log
+*.egg-info
+
+# Python test files
+.coverage
+cov-html/
+.pytest_cache
