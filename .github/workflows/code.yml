@@ -20,5 +20,8 @@ jobs:
       - name: Run ruff linter
         run: docker compose run corgos-telegram-bot ruff check .
 
+      - name: Run mypy type checks
+        run: docker compose run corgos-telegram-bot mypy corgos_telegram_bot
+
       - name: Run pytest
         run: docker compose run corgos-telegram-bot pytest

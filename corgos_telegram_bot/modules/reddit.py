@@ -147,40 +147,44 @@ class Reddit:
             bool: True if the post is valid, False otherwise
         """
         async with self._praw_requests_semaphore:
-            logging.debug(f"Loading post with url {submission.url}")
+            logging.debug(f"Loading post with url {submission.url}")  # type: ignore
             # skip stickied posts
-            if submission.stickied:
-                logging.debug(f"Skipping post {submission.url} due to stickied")
+            if submission.stickied:  # type: ignore
+                logging.debug(f"Skipping post {submission.url} due to stickied")  # type: ignore
                 return False
             # skip selftext posts
-            if submission.is_self:
-                logging.debug(f"Skipping post {submission.url} due to selftext")
+            if submission.is_self:  # type: ignore
+                logging.debug(f"Skipping post {submission.url} due to selftext")  # type: ignore
                 return False
 
             # skip posts that have a low score
-            if submission.score < min_score:
+            if submission.score < min_score:  # type: ignore
                 logging.warning(
-                    f"Skipping post {submission.url} due to low score "
-                    f"({submission.score}, min {min_score})"
+                    f"Skipping post {submission.url} due to low score "  # type: ignore
+                    f"({submission.score}, min {min_score})"  # type: ignore
                 )
                 return False
 
             # filter gifs
-            if any(x in submission.url for x in [".gif", ".gifv", "v.redd.it"]):
-                logging.warning(f"Skipping post {submission.url} because is gif")
+            if any(x in submission.url for x in [".gif", ".gifv", "v.redd.it"]):  # type: ignore
+                logging.warning(f"Skipping post {submission.url} because is gif")  # type: ignore
                 return False
 
             logging.debug("Post passed all checks, loading")
-            await submission.load()
+            await submission.load()  # type: ignore
 
             # try to open the image
             scraped_urls = []
             if hasattr(submission, "is_gallery"):
                 logging.debug("Post is a gallery, scraping")
-                scraped_urls = await self._scrapeGallery(submission.media_metadata)
+                scraped_urls = await self._scrapeGallery(submission.media_metadata)  # type: ignore
             else:
                 logging.debug("Post is not a gallery, scraping")
-                new_url = await self._scrapeImage(submission.url)
+                new_url = await self._scrapeImage(submission.url)  # type: ignore
+                if new_url is None:
+                    logging.debug("Url is not an image, skipping")
+                    return False
+
                 scraped_urls.append(new_url)
 
             # check the url for each image
@@ -242,7 +246,7 @@ class Reddit:
 
         # load subreddits
         subreddits_list = await self._settings.get("reddit_subreddits")
-        subreddits = await self._reddit.subreddit("+".join(subreddits_list))
+        subreddits = await self._reddit.subreddit("+".join(subreddits_list))  # type: ignore
         # create a list of tasks to be executed
         logging.debug("Creating tasks")
         min_score = await self._settings.get("reddit_min_score")
