@@ -8,7 +8,7 @@ from typing import Any
 import aiofiles
 import ujson
 
-from corgos_telegram_bot.modules.settings import Settings
+from corgos_telegram_bot.modules.settings import Settings, SingletonMeta
 
 
 class TestSettings(unittest.IsolatedAsyncioTestCase):
@@ -16,7 +16,9 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         """Set up a temporary settings file before each test."""
+        SingletonMeta._instances.clear()
         self.temp_dir = "temp_test_settings"
+        self._file_counter = 0
         os.makedirs(self.temp_dir, exist_ok=True)
         self.expected_content = {
             "key1": "value1",
@@ -27,19 +29,20 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         """Remove the temporary settings file after each test."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        SingletonMeta._instances.clear()
 
-    async def createSettingsFile(
-        self, content: dict, filename: str = "settings.json"
-    ) -> str:
+    async def createSettingsFile(self, content: dict) -> str:
         """Create a temporary settings file with the given content.
 
         Args:
             content (dict): The content to write to the settings file.
-            filename (str): The name of the settings file.
 
         Returns:
             str: The path to the created settings file.
         """
+        filename = f"{self._file_counter:0>4}_settings.json"
+        self._file_counter += 1
+
         test_path = os.path.join(self.temp_dir, filename)
         async with aiofiles.open(test_path, mode="w") as f:
             await f.write(ujson.dumps(content))
@@ -48,8 +51,12 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
     async def testUnicity(self) -> None:
         """Test that multiple instances of Settings are independent."""
-        test_path1 = await self.createSettingsFile(self.expected_content)
-        test_path2 = await self.createSettingsFile(self.expected_content)
+        test_path1 = await self.createSettingsFile(
+            self.expected_content,
+        )
+        test_path2 = await self.createSettingsFile(
+            self.expected_content,
+        )
 
         settings1 = Settings(path=test_path1)
         settings2 = Settings(path=test_path2)
@@ -68,14 +75,18 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
     async def testLoad(self) -> None:
         """Test loading settings from a file."""
-        test_path = await self.createSettingsFile(self.expected_content)
+        test_path = await self.createSettingsFile(
+            self.expected_content,
+        )
         settings = Settings(path=test_path)
         await settings.load()
         self.assertEqual(await settings.to_dict(), self.expected_content)
 
     async def testSaveLoad(self) -> None:
         """Test saving and loading settings."""
-        test_path = await self.createSettingsFile(self.expected_content)
+        test_path = await self.createSettingsFile(
+            self.expected_content,
+        )
         settings = Settings(path=test_path)
         await settings.load()
         await settings.set("key2", 100)
@@ -90,7 +101,9 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
     async def testSetLoad(self) -> None:
         """Test set (with implicit save) and loading settings."""
-        test_path = await self.createSettingsFile(self.expected_content)
+        test_path = await self.createSettingsFile(
+            self.expected_content,
+        )
         settings = Settings(path=test_path)
         await settings.load()
         await settings.set("key2", 100)
