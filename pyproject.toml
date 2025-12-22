@@ -22,8 +22,11 @@ dependencies = [
 
 
 [project.optional-dependencies]
-dev = ["ruff"]
+dev = ["ruff", "mypy"]
 test = ["pytest", "pytest-cov"]
+
+[tool.ruff]
+line-length = 88
 
 [tool.ruff.lint]
 preview = true                                   # needed for "DOC" rules
@@ -37,6 +40,9 @@ convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pylance]
+typeCheckingMode = "basic"
 
 [tool.coverage.run]
 branch = true
