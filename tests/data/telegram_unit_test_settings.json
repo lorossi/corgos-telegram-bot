@@ -1,0 +1,17 @@
+{
+    "telegram_token": "1018317454:AAFL_A2u62jXgOKyZBmiPg_VPh3twmllh3Q",
+    "telegram_admins": [
+        163238107
+    ],
+    "telegram_banned": [],
+    "telegram_corgos_sent": 39050,
+    "telegram_golden_corgos_found": 33,
+    "telegram_golden_corgo_url": "https:\/\/i.imgur.com\/5bKV4c0.jpg",
+    "telegram_start_date": "2019-10-20T00:00:00.000000",
+    "telegram_load_days": [
+        1,
+        3,
+        5
+    ],
+    "telegram_load_time": 145
+}
