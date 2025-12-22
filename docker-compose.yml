@@ -1,5 +1,8 @@
 services:
   corgos-telegram-bot:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: "dev,test"
     restart: always
     container_name: corgos-telegram-bot

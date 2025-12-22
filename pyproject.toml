@@ -22,8 +22,11 @@ dependencies = [
 
 
 [project.optional-dependencies]
-dev = ["ruff"]
-test = ["pytest", "pytest-cov"]
+dev = ["ruff", "mypy"]
+test = ["pytest", "pytest-cov", "pytest-asyncio"]
+
+[tool.ruff]
+line-length = 88
 
 [tool.ruff.lint]
 preview = true                                   # needed for "DOC" rules
@@ -36,7 +39,11 @@ unfixable = ["F401"]                             # do not fix unused imports
 convention = "google"
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.pylance]
+typeCheckingMode = "basic"
 
 [tool.coverage.run]
 branch = true

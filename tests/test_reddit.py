@@ -1,10 +1,9 @@
 """This module contains unit tests for the reddit module."""
 
-import asyncio
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
-from scripts.modules.reddit import EmptyQueueException, Reddit
+from corgos_telegram_bot.modules.reddit import EmptyQueueException, Reddit
 
 
 class TestRedditModule(unittest.IsolatedAsyncioTestCase):
@@ -12,14 +11,14 @@ class TestRedditModule(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         """Set up the Reddit instance for testing."""
-        self.settings_path = "scripts/tests/data/reddit_unit_test_settings.json"
+        self.settings_path = "tests/data/reddit_unit_test_settings.json"
 
     async def testInitializeReddit(self) -> None:
         """Test initializing the Reddit instance."""
         reddit = Reddit(settings_path=self.settings_path)
 
         with patch(
-            "scripts.modules.reddit.asyncpraw.Reddit",
+            "corgos_telegram_bot.modules.reddit.asyncpraw.Reddit",
             new_callable=AsyncMock,
         ) as mock_asyncpraw:
             await reddit.start()

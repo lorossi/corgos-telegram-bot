@@ -1,0 +1,24 @@
+name: Test and Lint
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker compose build --build-arg INSTALL_EXTRAS="dev,test" corgos-telegram-bot
+
+      - name: Run ruff linter
+        run: docker compose run corgos-telegram-bot ruff check .
+
+      - name: Run pytest
+        run: docker compose run corgos-telegram-bot pytest
