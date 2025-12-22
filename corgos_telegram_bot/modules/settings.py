@@ -139,6 +139,9 @@ class Settings(metaclass=SingletonMeta):
 
         Raises:
             KeyError: If the key does not exist in the settings.
+
+        Returns:
+            int | str | list[int]: The updated value of the setting.
         """
         logging.debug("Applying function to key '%s'", key)
         async with self._data_lock:
