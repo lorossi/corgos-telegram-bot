@@ -18,9 +18,7 @@ jobs:
         run: docker compose build --build-arg INSTALL_EXTRAS="dev,test" corgos-telegram-bot
 
       - name: Run ruff linter
-        continue-on-error: true
         run: docker compose run corgos-telegram-bot ruff check .
 
       - name: Run pytest
-        continue-on-error: true
         run: docker compose run corgos-telegram-bot pytest
