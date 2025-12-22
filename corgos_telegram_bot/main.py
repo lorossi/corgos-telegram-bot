@@ -5,7 +5,7 @@ import logging
 import tracemalloc
 from sys import argv
 
-from modules.telegram import Telegram
+from corgos_telegram_bot.modules.telegram import Telegram
 
 
 async def main(argv: list[str]) -> None:

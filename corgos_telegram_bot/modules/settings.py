@@ -128,7 +128,9 @@ class Settings(metaclass=SingletonMeta):
                 return deserializer(self._settings[key])
             return self._settings[key]
 
-    async def apply(self: Settings, key: str, func: Callable[[Any], Any]) -> None:
+    async def apply(
+        self: Settings, key: str, func: Callable[[Any], Any]
+    ) -> int | str | list[int]:
         """Apply a function to a specific setting.
 
         Args:

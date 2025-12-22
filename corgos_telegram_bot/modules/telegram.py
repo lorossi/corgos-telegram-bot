@@ -113,27 +113,28 @@ class Telegram:
         self._jobqueue = self._application.job_queue
 
         # bot start notification
-        self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")
+        self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")  # type: ignore
         # load posts for the first time
-        self._jobqueue.run_once(
-            self._loadPosts,
+        self._jobqueue.run_once(  # type: ignore
+            self._loadPosts,  # type: ignore
             when=0,
             name="load_posts",
             job_kwargs={"misfire_grace_time": 60},
         )
         # preload the username for faster access
-        self._jobqueue.run_once(
-            self._preloadUsername,
+        self._jobqueue.run_once(  # type: ignore
+            self._preloadUsername,  # type: ignore
             when=0,
             name="preload_username",
             job_kwargs={"misfire_grace_time": 60},
         )
 
         # load fresh corgos on set days
-        self._jobqueue.run_daily(
-            self._loadPosts,
+
+        self._jobqueue.run_daily(  # type: ignore
+            self._loadPosts,  # type: ignore
             days=load_days,
-            time=load_time,
+            time=time,
             name="load_posts",
         )
         logging.info("Job queue set up.")

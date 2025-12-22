@@ -28,9 +28,9 @@ class Reddit:
     _reddit: asyncpraw.Reddit
     _is_loading: bool
 
-    _settings: dict[str, str | int]
+    _settings: Settings
     _settings_path: str
-    _image_formats: tuple[str] = ("image/png", "image/jpeg")
+    _image_formats: tuple[str, ...] = ("image/png", "image/jpeg")
 
     def __init__(self, settings_path: str = "settings.json") -> None:
         """Initialize the Reddit interface."""
@@ -249,7 +249,9 @@ class Reddit:
         posts_limit = await self._settings.get("reddit_posts_limit")
         tasks = {
             self._scrapePost(submission, min_score=min_score)
-            async for submission in subreddits.top("week", limit=posts_limit)
+            async for submission in subreddits.top(
+                time_filter="week", limit=posts_limit
+            )
         }
         logging.debug("Executing tasks")
         # execute all the tasks and wait for them to finish
