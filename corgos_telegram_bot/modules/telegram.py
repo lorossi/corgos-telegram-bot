@@ -1,4 +1,7 @@
-"""Corgos BOT, a fully functional Telegram image bot where all the photos are stolen from Reddit.
+"""Corgos BOT.
+
+The first fully functional Telegram image bot where all the photos
+    are stolen from Reddit.
 
 Contact him on telegram @corgos_bot (direct url: t.me/corgos_bot)
 This bot DOES NOT LOG every chat and user. As such, it cannot
@@ -17,8 +20,6 @@ import traceback
 from datetime import datetime, time
 from random import choice, randint
 
-from corgos_telegram_bot.modules.reddit import Reddit
-from corgos_telegram_bot.modules.settings import Settings
 from telegram import Update, constants
 from telegram.ext import (
     Application,
@@ -28,9 +29,12 @@ from telegram.ext import (
     filters,
 )
 
+from corgos_telegram_bot.modules.reddit import Reddit
+from corgos_telegram_bot.modules.settings import Settings
+
 
 class Telegram:
-    """This class contains all the methods and variables needed to control the Telegram bot."""
+    """This class contains all the logic for the Telegram bot."""
 
     _bot_username: str
     _settings_path: str
@@ -44,7 +48,6 @@ class Telegram:
             settings_path (str): path to the settings file
         """
         logging.info("Initializing Telegram bot")
-        self._settings = {}
         self._settings_path = settings_path
         # create a Reddit handler
         self._reddit = Reddit(settings_path=settings_path)
@@ -57,6 +60,9 @@ class Telegram:
 
         Args:
             text (str): text to escape
+
+        Returns:
+            str: escaped text
         """
         to_escape = ["_", "*", "[", "]", "(", ")"]
         for char in to_escape:
@@ -174,7 +180,11 @@ class Telegram:
         await self._application.shutdown()
 
     async def _getAdmins(self) -> list[int]:
-        """Get the list of admin chat ids."""
+        """Get the list of admin chat ids.
+
+        Returns:
+            list[int]: list of admin chat ids
+        """
         admins = await self._settings.get("telegram_admins")
         return admins
 
@@ -405,6 +415,9 @@ class Telegram:
 
         Callback fired with command /check
         Hidden command as it's not the in command list
+
+        Raises:
+            Exception: if the golden corgo picture is not found
         """
         chat_id = update.effective_chat.id
 
@@ -641,7 +654,7 @@ class Telegram:
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-    async def _errorHandler(self, update: Update, context: ContextTypes):
+    async def _errorHandler(self, update: Update, context: ContextTypes) -> None:
         """Send a message to admins whenever an error is raised."""
         error_string = str(context.error)
         update_string = str(update)

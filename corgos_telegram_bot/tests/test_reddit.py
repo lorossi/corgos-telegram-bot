@@ -1,10 +1,9 @@
 """This module contains unit tests for the reddit module."""
 
-import asyncio
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
-from scripts.modules.reddit import EmptyQueueException, Reddit
+from modules.reddit import EmptyQueueException, Reddit
 
 
 class TestRedditModule(unittest.IsolatedAsyncioTestCase):

@@ -17,7 +17,7 @@ class EmptyQueueException(Exception):
 
 
 class Reddit:
-    """This class contains all the methods and variables needed to load the urls of the pictures from reddit."""
+    """This class contains all the logic to load pictures from reddit."""
 
     _queue: Queue[str]
     _temp_queue: set[str]
@@ -68,7 +68,10 @@ class Reddit:
         """Scrape a gallery of images.
 
         Args:
-            url (str): url of the gallery
+            media_metadata (dict): media metadata of the gallery
+
+        Returns:
+            list[str]: list of image urls
         """
         logging.debug("Scraping gallery")
         urls = []
@@ -106,11 +109,14 @@ class Reddit:
         logging.debug(f"Found {len(urls)} images in gallery")
         return urls
 
-    async def _scrapeImage(self, url: str) -> str:
+    async def _scrapeImage(self, url: str) -> str | None:
         """Load a single image, check if it's valid and add it to the queue.
 
         Args:
             url (str): url of the image
+
+        Returns:
+            str | None: url of the image if valid, None otherwise
         """
         logging.debug(f"Checking url {url}")
         try:
@@ -134,7 +140,8 @@ class Reddit:
         """Scrape a post from Reddit and add it to the temporary queue.
 
         Args:
-            submission (Submission)
+            submission (Submission): submission to be scraped
+            min_score (int): minimum score for the post to be valid. Defaults to 5.
 
         Returns:
             bool: True if the post is valid, False otherwise
@@ -286,7 +293,7 @@ class Reddit:
         async with self._queue_lock:
             url = self._queue.get()
             self._queue.put(url)
-        logging.info(f"Next image is %s", url)
+        logging.info("Next image is %s", url)
         return url
 
     async def isQueueEmpty(self) -> bool:

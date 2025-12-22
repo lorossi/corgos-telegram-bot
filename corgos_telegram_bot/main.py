@@ -8,7 +8,7 @@ from sys import argv
 from modules.telegram import Telegram
 
 
-async def main(argv: list[str]):
+async def main(argv: list[str]) -> None:
     """Start main function, setups logger and starts the bot."""
     # setup logger
     if "--debug" in argv:

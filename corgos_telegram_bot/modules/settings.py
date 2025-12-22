@@ -1,5 +1,7 @@
 """A module to manage Reddit settings using a singleton pattern."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any, Callable
@@ -13,7 +15,7 @@ class SingletonMeta(type):
 
     _instances: dict = {}
 
-    def __call__(cls, *args, **kwargs) -> object:
+    def __call__(cls, *args: Any, **kwargs: Any) -> Settings:
         """Return the singleton instance of the class."""
         if cls not in cls._instances:
             logging.debug("Creating new instance of singleton class %s", cls.__name__)
@@ -28,14 +30,14 @@ class Settings(metaclass=SingletonMeta):
     _data_lock: asyncio.Lock
     _settings: dict[str, int | str | list[int]]
 
-    def __init__(self, path: str = "settings.json") -> None:
+    def __init__(self: Settings, path: str = "settings.json") -> None:
         """Initialize the Settings with the path to the settings file."""
         self._path = path
 
         self._data_lock = asyncio.Lock()
         self._settings = {}
 
-    async def load(self) -> None:
+    async def load(self: Settings) -> None:
         """Load settings from a JSON file."""
         logging.debug("Loading settings from %s", self._path)
         await self._data_lock.acquire()
@@ -45,7 +47,7 @@ class Settings(metaclass=SingletonMeta):
         self._data_lock.release()
         logging.debug("Settings loaded: %s", self._settings)
 
-    async def _saveNoLock(self) -> None:
+    async def _saveNoLock(self: Settings) -> None:
         """Save settings to a JSON file without acquiring the lock."""
         logging.debug("Saving settings to %s without lock", self._path)
         async with aiofiles.open(self._path, mode="w") as f:
@@ -53,26 +55,36 @@ class Settings(metaclass=SingletonMeta):
             await f.write(settings_str)
         logging.debug("Settings saved without lock")
 
-    async def save(self) -> None:
+    async def save(self: Settings) -> None:
         """Save settings to a JSON file."""
         logging.debug("Saving settings to %s", self._path)
         async with self._data_lock:
             await self._saveNoLock()
         logging.debug("Settings saved")
 
-    async def to_dict(self) -> dict:
+    async def to_dict(self: Settings) -> dict:
         """Return the settings as a dictionary."""
         logging.debug("Returning settings as dictionary")
         async with self._data_lock:
             return self._settings
 
     async def set(
-        self,
+        self: Settings,
         key: str,
-        value,
+        value: Any,
         serializer: Callable[[Any], Any] | None = None,
     ) -> None:
-        """Set a specific setting."""
+        """Set a specific setting.
+
+        Args:
+            key (str): The setting key to set.
+            value (Any): The value to set for the key.
+            serializer (Callable[[Any], Any] | None): Optional function to serialize
+                the value before setting it.
+
+        Raises:
+            KeyError: If the key does not exist in the settings.
+        """
         logging.debug("Setting key '%s' to value '%s'", key, value)
         async with self._data_lock:
             if key not in self._settings:
@@ -88,9 +100,23 @@ class Settings(metaclass=SingletonMeta):
             await self._saveNoLock()
 
     async def get(
-        self, key: str, deserializer: Callable[[Any], Any] | None = None
+        self: Settings,
+        key: str,
+        deserializer: Callable[[Any], Any] | None = None,
     ) -> Any:
-        """Get a specific setting."""
+        """Get a specific setting.
+
+        Args:
+            key (str): The setting key to get.
+            deserializer (Callable[[Any], Any] | None): Optional function to deserialize
+                the value before returning it.
+
+        Raises:
+            KeyError: If the key does not exist in the settings.
+
+        Returns:
+            Any: The value of the setting.
+        """
         logging.debug("Getting value for key '%s'", key)
         async with self._data_lock:
             if key not in self._settings:
@@ -102,8 +128,16 @@ class Settings(metaclass=SingletonMeta):
                 return deserializer(self._settings[key])
             return self._settings[key]
 
-    async def apply(self, key: str, func: Callable[[Any], Any]) -> None:
-        """Apply a function to a specific setting."""
+    async def apply(self: Settings, key: str, func: Callable[[Any], Any]) -> None:
+        """Apply a function to a specific setting.
+
+        Args:
+            key (str): The setting key to apply the function to.
+            func (Callable[[Any], Any]): The function to apply to the setting value.
+
+        Raises:
+            KeyError: If the key does not exist in the settings.
+        """
         logging.debug("Applying function to key '%s'", key)
         async with self._data_lock:
             if key not in self._settings:
