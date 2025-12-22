@@ -7,7 +7,8 @@ from typing import Any
 
 import aiofiles
 import ujson
-from modules.settings import Settings
+
+from corgos_telegram_bot.modules.settings import Settings
 
 
 class TestSettings(unittest.IsolatedAsyncioTestCase):

@@ -9,7 +9,7 @@ import aiohttp
 import asyncpraw
 from asyncpraw.models import Submission
 
-from modules.settings import Settings
+from corgos_telegram_bot.modules.settings import Settings
 
 
 class EmptyQueueException(Exception):
