@@ -1,9 +1,8 @@
 """This module contains unit tests for the reddit module."""
 
 import unittest
-from unittest.mock import AsyncMock, patch
 
-from corgos_telegram_bot.modules.reddit import EmptyQueueException, Reddit
+from corgos_telegram_bot.modules.reddit import Reddit
 
 
 class TestRedditModule(unittest.IsolatedAsyncioTestCase):
