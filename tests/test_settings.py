@@ -54,12 +54,9 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         test_path1 = await self.createSettingsFile(
             self.expected_content,
         )
-        test_path2 = await self.createSettingsFile(
-            self.expected_content,
-        )
 
-        settings1 = Settings(path=test_path1)
-        settings2 = Settings(path=test_path2)
+        settings1 = Settings(settings_path=test_path1)
+        settings2 = Settings(settings_path=test_path1)
 
         await settings1.load()
         await settings2.load()
@@ -73,12 +70,40 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value1, "new_value1")
         self.assertEqual(value2, "new_value1")
 
+    async def testDifferentPaths(self) -> None:
+        """Test that Settings instances with different paths are independent."""
+        test_path1 = await self.createSettingsFile(
+            self.expected_content,
+        )
+        test_path2 = await self.createSettingsFile(
+            {
+                "keyA": "valueA",
+                "keyB": 100,
+            },
+        )
+
+        settings1 = Settings(settings_path=test_path1)
+        settings2 = Settings(settings_path=test_path2)
+
+        await settings1.load()
+        await settings2.load()
+
+        self.assertNotEqual(await settings1.to_dict(), await settings2.to_dict())
+
+        await settings1.set("key1", "new_value1")
+        value1 = await settings1.get("key1")
+
+        with self.assertRaises(KeyError):
+            await settings2.get("key1")
+
+        self.assertEqual(value1, "new_value1")
+
     async def testLoad(self) -> None:
         """Test loading settings from a file."""
         test_path = await self.createSettingsFile(
             self.expected_content,
         )
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         self.assertEqual(await settings.to_dict(), self.expected_content)
 
@@ -87,14 +112,14 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         test_path = await self.createSettingsFile(
             self.expected_content,
         )
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         await settings.set("key2", 100)
         await settings.save()
         del settings
 
         # Reload settings to verify persistence
-        new_settings = Settings(path=test_path)
+        new_settings = Settings(settings_path=test_path)
         await new_settings.load()
         value = await new_settings.get("key2")
         self.assertEqual(value, 100)
@@ -104,13 +129,13 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         test_path = await self.createSettingsFile(
             self.expected_content,
         )
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         await settings.set("key2", 100)
         del settings
 
         # Reload settings to verify persistence
-        new_settings = Settings(path=test_path)
+        new_settings = Settings(settings_path=test_path)
         await new_settings.load()
         value = await new_settings.get("key2")
         self.assertEqual(value, 100)
@@ -118,7 +143,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def testGet(self) -> None:
         """Test getting a specific setting."""
         test_path = await self.createSettingsFile(self.expected_content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         value = await settings.get("key2")
         self.assertEqual(value, 42)
@@ -126,7 +151,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def testSet(self) -> None:
         """Test setting a specific setting."""
         test_path = await self.createSettingsFile(self.expected_content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         await settings.set("key1", "new_value")
         value = await settings.get("key1")
@@ -135,7 +160,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def testGetNonExistentKey(self) -> None:
         """Test getting a non-existent key raises KeyError."""
         test_path = await self.createSettingsFile(self.expected_content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         with self.assertRaises(KeyError):
             await settings.get("non_existent_key")
@@ -143,7 +168,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def testSetNonExistentKey(self) -> None:
         """Test setting a non-existent key raises KeyError."""
         test_path = await self.createSettingsFile(self.expected_content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         with self.assertRaises(KeyError):
             await settings.set("non_existent_key", "value")
@@ -154,7 +179,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
             "int_value": "123",
         }
         test_path = await self.createSettingsFile(content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
 
         def deserializer(value: Any) -> int:
@@ -169,7 +194,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
             "int_value": "123",
         }
         test_path = await self.createSettingsFile(content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
 
         def serializer(value: int) -> str:
@@ -180,7 +205,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value, "456")
 
         # load again to verify persistence
-        new_settings = Settings(path=test_path)
+        new_settings = Settings(settings_path=test_path)
         await new_settings.load()
         value = await new_settings.get("int_value")
         self.assertEqual(value, "456")
@@ -191,7 +216,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
             "counter": 10,
         }
         test_path = await self.createSettingsFile(content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
 
         value = await settings.apply("counter", lambda x: x + 5)
@@ -201,7 +226,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         del settings
 
         # load again to verify persistence
-        new_settings = Settings(path=test_path)
+        new_settings = Settings(settings_path=test_path)
         await new_settings.load()
         value = await new_settings.get("counter")
         self.assertEqual(value, 15)
@@ -212,7 +237,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
             "numbers": [1, 2, 3],
         }
         test_path = await self.createSettingsFile(content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
 
         def append_number(lst: list[int], number: int) -> list[int]:
@@ -245,7 +270,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def testApplyNonExistentKey(self) -> None:
         """Test applying a function to a non-existent key raises KeyError."""
         test_path = await self.createSettingsFile(self.expected_content)
-        settings = Settings(path=test_path)
+        settings = Settings(settings_path=test_path)
         await settings.load()
         with self.assertRaises(KeyError):
             await settings.apply("non_existent_key", lambda x: x)

@@ -202,7 +202,7 @@ class Reddit:
         """Start the Reddit interface."""
         logging.info("Starting Reddit interface")
         # load settings
-        self._settings = Settings(self._settings_path)
+        self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
 
         # create a semaphore for the reddit requests

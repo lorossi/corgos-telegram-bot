@@ -74,7 +74,7 @@ class Telegram:
     async def start(self) -> None:
         """Start the bot."""
         logging.info("Starting bot...")
-        self._settings = Settings(self._settings_path)
+        self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
 
         # on which days the corgos will be fetched. Must be converted to tuple
