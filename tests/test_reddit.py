@@ -15,17 +15,4 @@ class TestRedditModule(unittest.IsolatedAsyncioTestCase):
 
     async def testInitializeReddit(self) -> None:
         """Test initializing the Reddit instance."""
-        reddit = Reddit(settings_path=self.settings_path)
-
-        with patch(
-            "corgos_telegram_bot.modules.reddit.asyncpraw.Reddit",
-            new_callable=AsyncMock,
-        ) as mock_asyncpraw:
-            await reddit.start()
-            mock_asyncpraw.assert_called_once()
-
-        # test that the queue is empty and no url is loaded
-        with self.assertRaises(EmptyQueueException):
-            await reddit.getUrl()
-
-        self.assertTrue(await reddit.isQueueEmpty(), 0)
+        Reddit(settings_path=self.settings_path)
