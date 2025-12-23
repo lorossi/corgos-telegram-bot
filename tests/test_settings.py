@@ -50,13 +50,14 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         return test_path
 
     async def testUnicity(self) -> None:
-        """Test that multiple instances of Settings are independent."""
+        """Test that multiple instances of Settings are not independent."""
         test_path1 = await self.createSettingsFile(
             self.expected_content,
         )
 
         settings1 = Settings(settings_path=test_path1)
         settings2 = Settings(settings_path=test_path1)
+        self.assertIs(settings1, settings2)
 
         await settings1.load()
         await settings2.load()
@@ -69,6 +70,17 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(value1, "new_value1")
         self.assertEqual(value2, "new_value1")
+
+    async def testUnicityDefaultPath(self) -> None:
+        """Test that multiple instances of Settings with default path are the same."""
+        settings1 = Settings()
+        settings2 = Settings()
+        self.assertIs(settings1, settings2)
+
+        await settings1.load()
+        await settings2.load()
+
+        self.assertEqual(await settings1.to_dict(), await settings2.to_dict())
 
     async def testDifferentPaths(self) -> None:
         """Test that Settings instances with different paths are independent."""
@@ -84,6 +96,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
 
         settings1 = Settings(settings_path=test_path1)
         settings2 = Settings(settings_path=test_path2)
+        self.assertIsNot(settings1, settings2)
 
         await settings1.load()
         await settings2.load()

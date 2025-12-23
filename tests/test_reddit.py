@@ -2,7 +2,7 @@
 
 import unittest
 
-from corgos_telegram_bot.modules.reddit import Reddit
+from corgos_telegram_bot.modules.reddit import EmptyQueueException, Reddit
 
 
 class TestRedditModule(unittest.IsolatedAsyncioTestCase):
@@ -14,4 +14,12 @@ class TestRedditModule(unittest.IsolatedAsyncioTestCase):
 
     async def testInitializeReddit(self) -> None:
         """Test initializing the Reddit instance."""
-        Reddit(settings_path=self.settings_path)
+        reddit = Reddit(settings_path=self.settings_path)
+        self.assertTrue(await reddit.isQueueEmpty())
+        self.assertFalse(reddit.is_loading)
+
+    async def testRedditGetEmptyQueue(self) -> None:
+        """Test getting an empty Reddit queue."""
+        reddit = Reddit(settings_path=self.settings_path)
+        with self.assertRaises(EmptyQueueException):
+            await reddit.getUrl()
