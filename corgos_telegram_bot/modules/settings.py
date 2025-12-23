@@ -13,15 +13,20 @@ import ujson
 class SingletonMeta(type):
     """A metaclass for creating singleton classes."""
 
-    _instances: dict = {}
+    _instances: dict[tuple, Settings] = {}
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Settings:
         """Return the singleton instance of the class."""
-        if cls not in cls._instances:
+        if "settings_path" not in kwargs:
+            kwargs["settings_path"] = "settings.json"
+
+        key_tuple = (cls, kwargs["settings_path"])
+        if key_tuple not in cls._instances:
             logging.debug("Creating new instance of singleton class %s", cls.__name__)
             instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
-        return cls._instances[cls]
+            cls._instances[key_tuple] = instance
+
+        return cls._instances[key_tuple]
 
 
 class Settings(metaclass=SingletonMeta):
@@ -30,9 +35,9 @@ class Settings(metaclass=SingletonMeta):
     _data_lock: asyncio.Lock
     _settings: dict[str, int | str | list[int]]
 
-    def __init__(self: Settings, path: str = "settings.json") -> None:
+    def __init__(self: Settings, settings_path: str = "settings.json") -> None:
         """Initialize the Settings with the path to the settings file."""
-        self._path = path
+        self._path = settings_path
 
         self._data_lock = asyncio.Lock()
         self._settings = {}
