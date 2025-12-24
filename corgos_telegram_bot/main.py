@@ -14,7 +14,7 @@ async def main(argv: list[str]) -> None:
     if "--debug" in argv:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.WARNING
 
     logging.basicConfig(
         level=level,
