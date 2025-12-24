@@ -291,3 +291,37 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         await settings.load()
         with self.assertRaises(KeyError):
             await settings.apply("non_existent_key", lambda x: x)
+
+    async def testValidateSettings(self) -> None:
+        """Test validating settings."""
+        valid_content = {
+            "key1": "value1",
+            "key2": 42,
+        }
+        test_path = await self.createSettingsFile(valid_content)
+        settings = Settings(settings_path=test_path)
+        await settings.load()
+        await settings.validate(list(valid_content.keys()))  # Should not raise
+
+    async def testValidateSettingsMissingKey(self) -> None:
+        """Test validating settings with a missing key raises KeyError."""
+        invalid_content = {
+            "key1": "value1",
+        }
+        test_path = await self.createSettingsFile(invalid_content)
+        settings = Settings(settings_path=test_path)
+        await settings.load()
+        with self.assertRaises(KeyError):
+            await settings.validate(["key1", "key2"])
+
+    async def testValidateSettingsUnexpectedKey(self) -> None:
+        """Test validating settings with an unexpected key does not raise KeyError."""
+        invalid_content = {
+            "key1": "value1",
+            "key2": 42,
+            "unexpected_key": "oops",
+        }
+        test_path = await self.createSettingsFile(invalid_content)
+        settings = Settings(settings_path=test_path)
+        await settings.load()
+        await settings.validate(["key1", "key2"])

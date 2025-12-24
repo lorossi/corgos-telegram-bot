@@ -1,6 +1,7 @@
 """This module contains unit tests for the reddit module."""
 
 import unittest
+from unittest.mock import AsyncMock, Mock, patch
 
 from corgos_telegram_bot.modules.reddit import EmptyQueueException, Reddit
 
@@ -17,6 +18,19 @@ class TestRedditModule(unittest.IsolatedAsyncioTestCase):
         reddit = Reddit(settings_path=self.settings_path)
         self.assertTrue(await reddit.isQueueEmpty())
         self.assertFalse(reddit.is_loading)
+
+    async def testRedditStartStop(self) -> None:
+        """Test starting and stopping the Reddit instance."""
+        reddit = Reddit(settings_path=self.settings_path)
+
+        with patch(
+            "corgos_telegram_bot.modules.reddit.asyncpraw.Reddit",
+            new_callable=Mock(),
+        ) as mock_reddit:
+            mock_reddit.return_value = AsyncMock()
+
+            await reddit.start()
+            await reddit.stop()
 
     async def testRedditGetEmptyQueue(self) -> None:
         """Test getting an empty Reddit queue."""
