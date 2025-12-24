@@ -18,11 +18,8 @@ class SingletonMeta(type):
     def __call__(cls, *args: Any, **kwargs: Any) -> Settings:
         """Return the singleton instance of the class."""
         if "settings_path" not in kwargs:
-            if len(args) == 0:
-                kwargs["settings_path"] = "settings.json"
-            else:
-                kwargs["settings_path"] = args[0]
-                args = ()
+            kwargs["settings_path"] = args[0]
+            args = args[1:]
 
         key_tuple = (cls, kwargs["settings_path"])
         if key_tuple not in cls._instances:
