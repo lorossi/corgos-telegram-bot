@@ -14,3 +14,6 @@ __pycache__
 .coverage
 cov-html/
 .pytest_cache
+
+# Bot data
+.reddit_cache/
