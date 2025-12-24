@@ -71,10 +71,14 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value1, "new_value1")
         self.assertEqual(value2, "new_value1")
 
-    async def testUnicityDefaultPath(self) -> None:
-        """Test that multiple instances of Settings with default path are the same."""
-        settings1 = Settings()
-        settings2 = Settings()
+    async def testNamedUnnamedParamsUnicity(self) -> None:
+        """Test that instances created with named and unnamed parameters are the same."""
+        test_path1 = await self.createSettingsFile(
+            self.expected_content,
+        )
+
+        settings1 = Settings(test_path1)
+        settings2 = Settings(settings_path=test_path1)
         self.assertIs(settings1, settings2)
 
         await settings1.load()
