@@ -74,8 +74,22 @@ class Telegram:
     async def start(self) -> None:
         """Start the bot."""
         logging.info("Starting bot...")
+        logging.info("Loading settings...")
         self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
+        await self._settings.validate(
+            [
+                "telegram_token",
+                "telegram_admins",
+                "telegram_banned",
+                "telegram_corgos_sent",
+                "telegram_golden_corgos_found",
+                "telegram_golden_corgo_url",
+                "telegram_start_date",
+                "telegram_load_days",
+                "telegram_load_time",
+            ]
+        )
 
         # on which days the corgos will be fetched. Must be converted to tuple
         #   since JSON only supports arrays. 0 for monday through 6 for sunday
