@@ -245,8 +245,6 @@ class Reddit:
             await self._settings.get("reddit_http_concurrent_requests")
         )
 
-        logging.info("Logging into Reddit")
-
         await self._openReddit()
 
         logging.debug("Reddit interface started")
