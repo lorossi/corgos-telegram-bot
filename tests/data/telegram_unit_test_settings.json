@@ -2,6 +2,7 @@
     "reddit_client_id": "REDDITCLIENTID",
     "reddit_client_secret": "REDDITCLIENTSECRET",
     "reddit_user_agent": "REDDITUSERAGENT",
+    "reddit_cache_folder": "reddit_cache",
     "reddit_posts_limit": 5,
     "reddit_min_score": 5,
     "reddit_praw_concurrent_requests": 20,

@@ -4,6 +4,7 @@
   "reddit_user_agent": "REDDITUSERAGENT",
   "reddit_posts_limit": 5,
   "reddit_min_score": 5,
+  "reddit_cache_folder": "reddit_cache",
   "reddit_praw_concurrent_requests": 20,
   "reddit_http_concurrent_requests": 20,
   "reddit_subreddits": [
