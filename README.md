@@ -64,8 +64,8 @@ If you want to run this bot yourself on your machine, you have to follow a few s
 1. Rename the file *settings.JSON.example* into *settings.JSON*
 2. Register to Reddit API
 3. Create a Telegram bot using `@BotFather` on Telegram and set the command list as it's provided in the `commandlist.md` file
-4. Create your own Golden Corgo image (yeah, I'm not going to provide it. That's top secret!)
-5. Start the docker container with `docker-compose up -d --build`
+4. Create your own Golden Corgo image *(yeah, I'm not going to provide it. That's top secret!)*
+5. Start the docker container with `docker compose up -d --build`
 
 There you go! Your very own corgi-spamming-machine is up and running!
 
