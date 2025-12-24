@@ -72,7 +72,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value2, "new_value1")
 
     async def testNamedUnnamedParamsUnicity(self) -> None:
-        """Test that instances created with named and unnamed parameters are the same."""
+        """Test that instances created with named and unnamed parameters are equal."""
         test_path1 = await self.createSettingsFile(
             self.expected_content,
         )
