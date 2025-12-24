@@ -56,6 +56,25 @@ class Settings(metaclass=SingletonMeta):
         self._data_lock.release()
         logging.debug("Settings loaded: %s", self._settings)
 
+    async def validate(self: Settings, required_keys: list[str]) -> None:
+        """Validate that all required keys are present in the settings.
+
+        Args:
+            required_keys (list[str]): A list of keys that must be present in the settings.
+
+        Raises:
+            KeyError: If any required key is missing from the settings.
+        """
+        logging.debug("Validating settings with required keys: %s", required_keys)
+        async with self._data_lock:
+            for key in required_keys:
+                if key not in self._settings:
+                    error_msg = f"Required key '{key}' not found in settings."
+                    logging.error(error_msg)
+                    raise KeyError(error_msg)
+
+        logging.debug("All required keys are present in the settings")
+
     async def _saveNoLock(self: Settings) -> None:
         """Save settings to a JSON file without acquiring the lock."""
         logging.debug("Saving settings to %s without lock", self._path)
