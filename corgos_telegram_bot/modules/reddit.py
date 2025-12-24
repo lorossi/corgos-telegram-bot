@@ -2,12 +2,12 @@
 
 import asyncio
 import logging
-import os
-import shutil
+from os import path
 from queue import Queue
 from random import shuffle
 
 import aiofiles
+import aiofiles.os
 import aiohttp
 import asyncpraw
 from asyncpraw.models import Submission
@@ -30,11 +30,10 @@ class Reddit:
         "image/jpg",
     )
 
-    _temp_queue: list[str]
-    _queue: Queue[str]
-
-    _temp_queue_lock: asyncio.Lock
     _queue_lock: asyncio.Lock
+    _temp_queue_lock: asyncio.Lock
+    _queue: Queue[str]
+    _temp_queue: set[str]
 
     _praw_requests_semaphore: asyncio.Semaphore
     _http_requests_semaphore: asyncio.Semaphore
@@ -46,13 +45,14 @@ class Reddit:
         logging.info("Initializing Reddit interface")
 
         self._settings_path = settings_path
-        self._is_loading = False
 
+        self._queue_lock = asyncio.Lock()
         self._queue = Queue()
-        self._temp_queue = []
 
         self._temp_queue_lock = asyncio.Lock()
-        self._queue_lock = asyncio.Lock()
+        self._temp_queue = set()
+
+        self._is_loading = False
 
         logging.info("Reddit interface initialized")
 
@@ -64,15 +64,17 @@ class Reddit:
         """Create the temporary folder for caching images."""
         logging.info("Creating temporary folder for caching images")
         cache_folder = await self._settings.get("reddit_cache_folder")
-        shutil.rmtree(cache_folder, ignore_errors=True)
-        os.makedirs(cache_folder, exist_ok=True)
+        await aiofiles.os.makedirs(cache_folder, exist_ok=True)
         logging.info(f"Temporary folder {cache_folder} created")
 
     async def _deleteTempFolder(self) -> None:
         """Delete the temporary folder for caching images."""
         logging.info("Deleting temporary folder for caching images")
         cache_folder = await self._settings.get("reddit_cache_folder")
-        shutil.rmtree(cache_folder, ignore_errors=True)
+        for filename in await aiofiles.os.listdir(cache_folder):
+            filepath = path.join(cache_folder, filename)
+            await aiofiles.os.remove(filepath)
+        await aiofiles.os.rmdir(cache_folder)
         logging.info(f"Temporary folder {cache_folder} deleted")
 
     async def _extractFilenameFromUrl(self, x: int, url: str) -> str:
@@ -88,7 +90,7 @@ class Reddit:
         logging.debug(f"Extracting filename from url {url}")
         folder = await self._settings.get("reddit_cache_folder")
         filename = url.split("/")[-1].split("?")[0]
-        filepath = os.path.join(folder, f"{x}_{filename}")
+        filepath = path.join(folder, f"{x}_{filename}")
         logging.debug(f"Filename extracted from url {url} is {filepath}")
         return filepath
 
@@ -208,8 +210,7 @@ class Reddit:
                 logging.debug("Downloading image %d/%d from post", x + 1, len(urls))
                 filepath = await self._extractFilenameFromUrl(x, url)
                 await self._downloadImage(url, filepath)
-                async with self._temp_queue_lock:
-                    self._temp_queue.append(filepath)
+                self._temp_queue.add(filepath)
 
             return True
 
@@ -286,8 +287,6 @@ class Reddit:
         """
         logging.info("Loading posts from Reddit")
         self._is_loading = True
-        async with self._temp_queue_lock:
-            self._temp_queue = []
 
         # load subreddits
         subreddits_list = await self._settings.get("reddit_subreddits")
@@ -306,21 +305,35 @@ class Reddit:
         # execute all the tasks and wait for them to finish
         await asyncio.gather(*tasks)
 
-        logging.debug("Shuffling loaded posts")
-        await self._temp_queue_lock.acquire()
-        shuffle(self._temp_queue)
+        # list all the downloaded and remove from cache the ones
+        # that are not in the temp queue
+        logging.debug("Cleaning up downloaded images")
+        download_path = await self._settings.get("reddit_cache_folder")
 
-        await self._queue_lock.acquire()
-        for filepath in self._temp_queue:
-            self._queue.put(filepath)
-        self._queue_lock.release()
-        self._temp_queue_lock.release()
+        for filename in await aiofiles.os.listdir(download_path):
+            filepath = path.join(download_path, filename)
+            if filepath not in self._temp_queue:
+                logging.debug(f"Removing file {filepath} from cache")
+                await aiofiles.os.remove(filepath)
+
+        # shuffle the loaded posts and put them in the queue
+        loaded = list(self._temp_queue)
+        shuffle(loaded)
+        logging.debug("Shuffling loaded posts")
+
+        # put the loaded posts in the queue
+        async with self._queue_lock:
+            while not self._queue.empty():
+                self._queue.get()
+
+            for item in loaded:
+                self._queue.put(item)
 
         self._is_loading = False
 
         # return the number of posts loaded
-        logging.info("Loaded about %d posts from Reddit", len(self._temp_queue))
-        return len(self._temp_queue)
+        logging.info("Loaded %d posts from Reddit", len(loaded))
+        return len(loaded)
 
     async def getPhoto(self) -> str:
         """Get an image from the queue.
