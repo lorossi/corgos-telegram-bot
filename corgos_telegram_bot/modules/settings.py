@@ -13,15 +13,21 @@ import ujson
 class SingletonMeta(type):
     """A metaclass for creating singleton classes."""
 
-    _instances: dict = {}
+    _instances: dict[tuple, Settings] = {}
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Settings:
         """Return the singleton instance of the class."""
-        if cls not in cls._instances:
+        if "settings_path" not in kwargs:
+            kwargs["settings_path"] = args[0]
+            args = args[1:]
+
+        key_tuple = (cls, kwargs["settings_path"])
+        if key_tuple not in cls._instances:
             logging.debug("Creating new instance of singleton class %s", cls.__name__)
             instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
-        return cls._instances[cls]
+            cls._instances[key_tuple] = instance
+
+        return cls._instances[key_tuple]
 
 
 class Settings(metaclass=SingletonMeta):
@@ -30,9 +36,9 @@ class Settings(metaclass=SingletonMeta):
     _data_lock: asyncio.Lock
     _settings: dict[str, int | str | list[int]]
 
-    def __init__(self: Settings, path: str = "settings.json") -> None:
+    def __init__(self: Settings, settings_path: str = "settings.json") -> None:
         """Initialize the Settings with the path to the settings file."""
-        self._path = path
+        self._path = settings_path
 
         self._data_lock = asyncio.Lock()
         self._settings = {}
@@ -46,6 +52,26 @@ class Settings(metaclass=SingletonMeta):
             self._settings = ujson.loads(content)
         self._data_lock.release()
         logging.debug("Settings loaded: %s", self._settings)
+
+    async def validate(self: Settings, required_keys: list[str]) -> None:
+        """Validate that all required keys are present in the settings.
+
+        Args:
+            required_keys (list[str]): A list of keys that must be present
+                in the settings.
+
+        Raises:
+            KeyError: If any required key is missing from the settings.
+        """
+        logging.debug("Validating settings with required keys: %s", required_keys)
+        async with self._data_lock:
+            for key in required_keys:
+                if key not in self._settings:
+                    error_msg = f"Required key '{key}' not found in settings."
+                    logging.error(error_msg)
+                    raise KeyError(error_msg)
+
+        logging.debug("All required keys are present in the settings")
 
     async def _saveNoLock(self: Settings) -> None:
         """Save settings to a JSON file without acquiring the lock."""

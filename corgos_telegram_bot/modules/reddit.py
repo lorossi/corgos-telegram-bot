@@ -197,13 +197,44 @@ class Reddit:
 
             return True
 
+    async def _openReddit(self) -> None:
+        """Log in to Reddit using asyncpraw."""
+        logging.info("Logging into Reddit")
+        self._reddit = asyncpraw.Reddit(
+            client_id=await self._settings.get("reddit_client_id"),
+            client_secret=await self._settings.get("reddit_client_secret"),
+            user_agent=await self._settings.get("reddit_user_agent"),
+        )
+        logging.info("Logged into Reddit")
+
+    async def _closeReddit(self) -> None:
+        """Log out from Reddit."""
+        logging.info("Logging out from Reddit")
+        await self._reddit.close()
+        logging.info("Logged out from Reddit")
+
     # Public methods
     async def start(self) -> None:
         """Start the Reddit interface."""
         logging.info("Starting Reddit interface")
         # load settings
-        self._settings = Settings(self._settings_path)
+        logging.debug("Loading settings")
+        self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
+        # validate settings
+        await self._settings.validate(
+            [
+                "reddit_client_id",
+                "reddit_client_secret",
+                "reddit_user_agent",
+                "reddit_subreddits",
+                "reddit_min_score",
+                "reddit_posts_limit",
+                "reddit_praw_concurrent_requests",
+                "reddit_http_concurrent_requests",
+            ]
+        )
+        logging.debug("Settings loaded and validated")
 
         # create a semaphore for the reddit requests
         self._praw_requests_semaphore = asyncio.Semaphore(
@@ -214,20 +245,14 @@ class Reddit:
             await self._settings.get("reddit_http_concurrent_requests")
         )
 
-        logging.info("Logging into Reddit")
-
-        self._reddit = asyncpraw.Reddit(
-            client_id=await self._settings.get("reddit_client_id"),
-            client_secret=await self._settings.get("reddit_client_secret"),
-            user_agent=await self._settings.get("reddit_user_agent"),
-        )
+        await self._openReddit()
 
         logging.debug("Reddit interface started")
 
     async def stop(self) -> None:
         """Stop the Reddit interface."""
         logging.info("Stopping Reddit interface")
-        await self._reddit.close()
+        await self._closeReddit()
         logging.info("Reddit interface stopped")
 
     async def loadPostsAsync(self) -> int:

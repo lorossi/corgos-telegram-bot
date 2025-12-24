@@ -1,0 +1,25 @@
+{
+    "reddit_client_id": "REDDITCLIENTID",
+    "reddit_client_secret": "REDDITCLIENTSECRET",
+    "reddit_user_agent": "REDDITUSERAGENT",
+    "reddit_posts_limit": 5,
+    "reddit_min_score": 5,
+    "reddit_praw_concurrent_requests": 20,
+    "reddit_http_concurrent_requests": 20,
+    "reddit_subreddits": [
+        "news"
+    ],
+    "telegram_token": "TOKEN",
+    "telegram_admins": [
+        123456789
+    ],
+    "telegram_banned": [],
+    "telegram_corgos_sent": 0,
+    "telegram_golden_corgos_found": 0,
+    "telegram_golden_corgo_url": "GOLDENCORGOURLEHEHEH",
+    "telegram_start_date": "2025-01-01T00:00:00.000000",
+    "telegram_load_days": [
+        1
+    ],
+    "telegram_load_time": 60
+}

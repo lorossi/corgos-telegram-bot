@@ -18,10 +18,10 @@ jobs:
         run: docker compose build --build-arg INSTALL_EXTRAS="dev,test" corgos-telegram-bot
 
       - name: Run ruff linter
-        run: docker compose run corgos-telegram-bot ruff check .
+        run: docker compose run corgos-telegram-bot ruff check corgos_telegram_bot tests
 
       - name: Run mypy type checks
-        run: docker compose run corgos-telegram-bot mypy corgos_telegram_bot
+        run: docker compose run corgos-telegram-bot mypy corgos_telegram_bot tests
 
       - name: Run pytest
         run: docker compose run corgos-telegram-bot pytest
