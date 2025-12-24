@@ -8,6 +8,7 @@
     ],
     "reddit_posts_limit": 5,
     "reddit_min_score": 5,
+    "reddit_cache_folder": "REDDIT-CACHE-FOLDER",
     "reddit_praw_concurrent_requests": 20,
     "reddit_http_concurrent_requests": 20,
     "telegram_token": "TELEGRAM-TOKEN",
@@ -17,7 +18,7 @@
     "telegram_banned": [],
     "telegram_corgos_sent": 0,
     "telegram_golden_corgos_found": 0,
-    "telegram_golden_corgo_url": "SECRET EHEHEH",
+    "telegram_golden_corgo_url": "SECRET-EHEHEH",
     "telegram_start_date": "2019-10-20T00:00:00.000000",
     "telegram_load_days": [
         1,

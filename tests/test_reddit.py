@@ -45,4 +45,4 @@ class TestRedditModule(unittest.IsolatedAsyncioTestCase):
         """Test getting an empty Reddit queue."""
         reddit = Reddit(settings_path=self.settings_path)
         with self.assertRaises(EmptyQueueException):
-            await reddit.getUrl()
+            await reddit.getPhoto()

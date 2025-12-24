@@ -366,7 +366,7 @@ class Telegram:
 
         if randint(1, 1000) == 1:
             # if we are lucky enough, we get a golden corgo!
-            url = await self._settings.get("telegram_golden_corgo_url")
+            photo = await self._settings.get("telegram_golden_corgo_url")
             await self._settings.apply(
                 "telegram_golden_corgos_found",
                 lambda x: x + 1,
@@ -374,7 +374,7 @@ class Telegram:
             message = "\n*GOLDEN CORGO FOUND!*"
         else:
             # otherwise we get a normal corgo
-            url = await self._reddit.getUrl()
+            photo = await self._reddit.getPhoto()
             message = self._escapeMarkdown(self._bot_username)
 
         # increase the corgo counter
@@ -386,7 +386,7 @@ class Telegram:
         # send the corgo to the user
         await context.bot.send_photo(  # type: ignore
             chat_id=chat_id,
-            photo=url,
+            photo=photo,
             caption=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
