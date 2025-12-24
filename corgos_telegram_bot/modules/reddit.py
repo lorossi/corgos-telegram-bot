@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from queue import Queue
+from asyncio import Queue
 from random import shuffle
 
 import aiohttp
@@ -30,7 +30,7 @@ class Reddit:
 
     _settings: Settings
     _settings_path: str
-    _image_formats: tuple[str, ...] = ("image/png", "image/jpeg")
+    _image_formats: tuple[str, ...] = ("image/png", "image/jpeg", "image/jpg")
 
     def __init__(self, settings_path: str = "settings.json") -> None:
         """Initialize the Reddit interface."""
@@ -58,10 +58,10 @@ class Reddit:
             Response: response of the request
         """
         async with self._http_requests_semaphore:
-            logging.debug(f"Requesting url {url}")
+            logging.debug("Requesting url %s", url)
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
-                    logging.debug(f"Request to url {url} completed")
+                    logging.debug("Request to url %s completed", url)
                     return response
 
     async def _scrapeGallery(self, media_metadata: dict) -> list[str]:
@@ -99,14 +99,9 @@ class Reddit:
                 logging.debug("Url is not an image, skipping")
                 continue
 
-            image_valid = await self._scrapeImage(image_url)
-            if image_valid is None:
-                logging.debug("Url is not an image, skipping")
-                continue
-
             urls.append(image_url)
 
-        logging.debug(f"Found {len(urls)} images in gallery")
+        logging.debug("Found %d images in gallery", len(urls))
         return urls
 
     async def _scrapeImage(self, url: str) -> str | None:
@@ -118,7 +113,7 @@ class Reddit:
         Returns:
             str | None: url of the image if valid, None otherwise
         """
-        logging.debug(f"Checking url {url}")
+        logging.debug("Checking url %s", url)
         try:
             r = await self._asyncRequest(url)
             image_format = r.headers["content-type"]
@@ -126,10 +121,10 @@ class Reddit:
                 logging.debug("Url is an image, adding to queue")
                 return url
             else:
-                logging.debug(f"Url is not an image, skipping. Format: {image_format}")
+                logging.debug("Url is not an image, skipping. Format: %s", image_format)
                 return None
         except Exception as e:
-            logging.error(f"Cannot open url {url}, error {e}")
+            logging.error("Cannot open url %s, error %s", url, e)
             return None
 
     async def _scrapePost(
@@ -147,37 +142,38 @@ class Reddit:
             bool: True if the post is valid, False otherwise
         """
         async with self._praw_requests_semaphore:
-            logging.debug(f"Loading post with url {submission.url}")  # type: ignore
+            logging.debug("Loading post with url %s", submission.url)  # type: ignore
             # skip stickied posts
             if submission.stickied:  # type: ignore
-                logging.debug(f"Skipping post {submission.url} due to stickied")  # type: ignore
+                logging.debug("Skipping post %s due to stickied", submission.url)  # type: ignore
                 return False
             # skip selftext posts
             if submission.is_self:  # type: ignore
-                logging.debug(f"Skipping post {submission.url} due to selftext")  # type: ignore
+                logging.debug("Skipping post %s due to selftext", submission.url)  # type: ignore
                 return False
 
             # skip posts that have a low score
             if submission.score < min_score:  # type: ignore
                 logging.warning(
-                    f"Skipping post {submission.url} due to low score "  # type: ignore
-                    f"({submission.score}, min {min_score})"  # type: ignore
+                    "Skipping post %s due to low score (%d < %d)",  # type: ignore
+                    submission.url,  # type: ignore
+                    submission.score,  # type: ignore
+                    min_score,  # type: ignore
                 )
                 return False
 
             # filter gifs
-            if any(x in submission.url for x in [".gif", ".gifv", "v.redd.it"]):  # type: ignore
-                logging.warning(f"Skipping post {submission.url} because is gif")  # type: ignore
+            if "v.redd.it" in submission.url:  # type: ignore
+                logging.warning("Skipping post %s because is gif", submission.url)  # type: ignore
                 return False
 
             logging.debug("Post passed all checks, loading")
             await submission.load()  # type: ignore
 
             # try to open the image
-            scraped_urls = []
             if hasattr(submission, "is_gallery"):
                 logging.debug("Post is a gallery, scraping")
-                scraped_urls = await self._scrapeGallery(submission.media_metadata)  # type: ignore
+                urls = await self._scrapeGallery(submission.media_metadata)  # type: ignore
             else:
                 logging.debug("Post is not a gallery, scraping")
                 new_url = await self._scrapeImage(submission.url)  # type: ignore
@@ -185,15 +181,15 @@ class Reddit:
                     logging.debug("Url is not an image, skipping")
                     return False
 
-                scraped_urls.append(new_url)
+                urls = [new_url]
 
             # check the url for each image
-            for url in scraped_urls:
+            for url in urls:
                 # if it's a valid image, we add it to the queue
-                logging.debug(f"Adding {url} to list")
+                logging.debug("Adding %s to list", url)
                 async with self._temp_queue_lock:
                     self._temp_queue.add(url)
-                logging.info(f"Added {url} to list")
+                logging.info("Added %s to list", url)
 
             return True
 
@@ -269,17 +265,18 @@ class Reddit:
             self._temp_queue = set()
             self._is_loading = True
 
-        # load subreddits
+        # load settings
         subreddits_list = await self._settings.get("reddit_subreddits")
         subreddits = await self._reddit.subreddit("+".join(subreddits_list))  # type: ignore
-        # create a list of tasks to be executed
-        logging.debug("Creating tasks")
-        min_score = await self._settings.get("reddit_min_score")
         posts_limit = await self._settings.get("reddit_posts_limit")
+        min_score = await self._settings.get("reddit_min_score")
+        # create a list of tasks to be executed
+        logging.debug("Creating %d tasks", posts_limit)
         tasks = {
             self._scrapePost(submission, min_score=min_score)
             async for submission in subreddits.top(
-                time_filter="week", limit=posts_limit
+                time_filter="week",
+                limit=posts_limit,
             )
         }
         logging.debug("Executing tasks")
@@ -295,7 +292,7 @@ class Reddit:
 
         self._queue = Queue(len(self._temp_queue))
         for url in shuffled_queue:
-            self._queue.put(url)
+            await self._queue.put(url)
 
         self._is_loading = False
 
@@ -322,8 +319,8 @@ class Reddit:
             raise EmptyQueueException(error_msg)
 
         async with self._queue_lock:
-            url = self._queue.get()
-            self._queue.put(url)
+            url = await self._queue.get()
+            await self._queue.put(url)
         logging.info("Next image is %s", url)
         return url
 
@@ -333,7 +330,7 @@ class Reddit:
         async with self._queue_lock:
             empty = self._queue.empty()
 
-        logging.debug(f"Queue is empty: {empty}")
+        logging.debug("Queue is empty: %s", empty)
         return empty
 
     @property
