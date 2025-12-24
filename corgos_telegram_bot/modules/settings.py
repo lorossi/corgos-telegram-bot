@@ -57,7 +57,8 @@ class Settings(metaclass=SingletonMeta):
         """Validate that all required keys are present in the settings.
 
         Args:
-            required_keys (list[str]): A list of keys that must be present in the settings.
+            required_keys (list[str]): A list of keys that must be present
+                in the settings.
 
         Raises:
             KeyError: If any required key is missing from the settings.
