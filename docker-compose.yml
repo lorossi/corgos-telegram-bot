@@ -2,7 +2,6 @@ services:
   corgos-telegram-bot:
     build:
       context: .
-      args:
-        INSTALL_EXTRAS: "dev,test"
-    restart: always
+      dockerfile: Dockerfile
+    restart: unless-stopped
     container_name: corgos-telegram-bot
