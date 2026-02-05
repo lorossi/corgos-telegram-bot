@@ -13,7 +13,7 @@ dependencies = [
   "asyncpraw==7.8.1",
   "python-telegram-bot[job-queue]==22.5.0",
   "ujson==5.11.0",
-  "aiohttp==3.13.2",
+  "aiohttp==3.13.3",
 ]
 
 [project.urls]
