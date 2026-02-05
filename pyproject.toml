@@ -20,9 +20,13 @@ dependencies = [
 "Homepage" = "https://github.com/lorossi/corgos-telegram-bot"
 "Repository" = "https://github.com/lorossi/corgos-telegram-bot"
 
-
 [project.optional-dependencies]
-dev = ["ruff==0.14.10", "mypy==1.19.1", "types-aiofiles==25.1.0.20251011", "asyncpraw_stubs==0.0.3"]
+dev = [
+  "ruff==0.14.10",
+  "mypy==1.19.1",
+  "types-aiofiles==25.1.0.20251011",
+  "asyncpraw_stubs==0.0.3",
+]
 test = ["pytest", "pytest-cov", "pytest-asyncio"]
 
 [tool.ruff]
@@ -48,11 +52,4 @@ typeCheckingMode = "basic"
 [tool.coverage.run]
 branch = true
 source = ["corgos_telegram_bot"]
-omit = [
-  "integration_tests/**", # exclude all test files
-  "**/__init__.py",       # exclude any __init__.py
-  "scripts/tests/**",     # exclude all test files
-]
-
-[tool.coverage.report]
-omit = ["tests/**", "**/__init__.py"]
+omit = ["tests/**", "**/__init__.py", "main.py"]
