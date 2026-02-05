@@ -2,6 +2,5 @@ services:
   corgos-telegram-bot:
     build:
       context: .
-      dockerfile: Dockerfile
     restart: unless-stopped
     container_name: corgos-telegram-bot

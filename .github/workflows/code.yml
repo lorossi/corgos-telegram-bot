@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker compose build --build-arg INSTALL_EXTRAS="dev,test" corgos-telegram-bot
+        run: docker compose build --build-arg INSTALL_EXTRAS="dev,test"
 
       - name: Run ruff linter
         run: docker compose run corgos-telegram-bot ruff check corgos_telegram_bot tests
