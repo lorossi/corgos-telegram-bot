@@ -44,7 +44,7 @@ All the images are sourced from Reddit, namely from */r/corgi* and */r/babycorgi
 
 In order to be chosen, a post must have a minimum score, fixed in the settings file. I trust each moderator and their ability to remove any unsuitable image.
 
-The subreddits are scraped three times a week, at 2.20 AM (GMT), and every time 300 (as set in *settings.JSON* file) *weekly hottest* posts are loaded.
+The subreddits are scraped three times a week, at 2.20 AM (GMT), and every time 300 (as set in the *settings.json* file) *weekly hottest* posts are loaded.
 Every post is then analysed and any non pictures posts or posts with a low score are discarded.  Lastly, the list of URL is randomized.
 
 Every time a picture is sent the list is rotated, so it's impossible that the same picture is sent twice (or more!) in a row.
@@ -58,16 +58,32 @@ However, I plan to add one command to get photos of my corgi as soon as I manage
 
 ## Installation
 
-I provided a `pyproject.toml` file in order to automatically install all the needed requirements.
+The project is managed with [uv](https://docs.astral.sh/uv/).
 If you want to run this bot yourself on your machine, you have to follow a few steps:
 
-1. Rename the file *settings.JSON.example* into *settings.JSON*
+1. Copy the file *settings.json.example* into *data/settings.json*
 2. Register to Reddit API
 3. Create a Telegram bot using `@BotFather` on Telegram and set the command list as it's provided in the `commandlist.md` file
 4. Create your own Golden Corgo image *(yeah, I'm not going to provide it. That's top secret!)*
 5. Start the docker container with `docker compose up -d --build`
 
 There you go! Your very own corgi-spamming-machine is up and running!
+
+The *data* folder is mounted inside the container, so the settings and the stats are kept when the container is rebuilt.
+
+In the settings file, `telegram_load_days` lists the days the posts are loaded on (`0` is Sunday, `6` is Saturday) and `telegram_load_time` is the time they are loaded at, in minutes after midnight (UTC).
+
+To run the bot without docker, use `uv run corgos-telegram-bot --settings data/settings.json` (add `--debug` for verbose logs).
+
+### Development
+
+```bash
+uv sync                # install the bot together with the dev tools
+uv run ruff check      # lint
+uv run ruff format     # format
+uv run ty check        # type check
+uv run pytest --cov    # run the tests
+```
 
 ## Licensing
 
