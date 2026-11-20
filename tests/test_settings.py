@@ -1,11 +1,13 @@
 """This module contains unit tests for the settings module."""
 
-import os
 import shutil
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any
 
 import aiofiles
+import aiofiles.os
 import ujson
 
 from corgos_telegram_bot.modules.settings import Settings, SingletonMeta
@@ -17,9 +19,8 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         """Set up a temporary settings file before each test."""
         SingletonMeta._instances.clear()
-        self.temp_dir = "temp_test_settings"
+        self.temp_dir = tempfile.mkdtemp()
         self._file_counter = 0
-        os.makedirs(self.temp_dir, exist_ok=True)
         self.expected_content = {
             "key1": "value1",
             "key2": 42,
@@ -43,7 +44,7 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         filename = f"{self._file_counter:0>4}_settings.json"
         self._file_counter += 1
 
-        test_path = os.path.join(self.temp_dir, filename)
+        test_path = str(Path(self.temp_dir) / filename)
         async with aiofiles.open(test_path, mode="w") as f:
             await f.write(ujson.dumps(content))
 
@@ -325,3 +326,32 @@ class TestSettings(unittest.IsolatedAsyncioTestCase):
         settings = Settings(settings_path=test_path)
         await settings.load()
         await settings.validate(["key1", "key2"])
+
+    async def testDefaultPath(self) -> None:
+        """Test that the default path is used when none is given."""
+        self.assertIs(Settings(), Settings(settings_path="settings.json"))
+
+    async def testGetReturnsCopy(self) -> None:
+        """Test that mutating a returned value does not change the settings."""
+        test_path = await self.createSettingsFile(self.expected_content)
+        settings = Settings(settings_path=test_path)
+        await settings.load()
+
+        value = await settings.get("key3")
+        value.append(4)
+        content = await settings.to_dict()
+        content["key1"] = "changed"
+
+        self.assertEqual(await settings.get("key3"), [1, 2, 3])
+        self.assertEqual(await settings.get("key1"), "value1")
+
+    async def testSaveIsAtomic(self) -> None:
+        """Test that saving does not leave temporary files behind."""
+        test_path = await self.createSettingsFile(self.expected_content)
+        settings = Settings(settings_path=test_path)
+        await settings.load()
+        await settings.set("key2", 100)
+
+        self.assertEqual(
+            await aiofiles.os.listdir(self.temp_dir), [Path(test_path).name]
+        )
