@@ -13,33 +13,43 @@ Yeah, I'm about as surprised as you.
 MIT License - 2025, Lorenzo Rossi
 """
 
+import asyncio
 import logging
-import os
-import sys
 import traceback
-from datetime import datetime, time
+from datetime import UTC, datetime, time
 from random import choice, randint
 
 from telegram import Update, constants
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
+    JobQueue,
     MessageHandler,
     filters,
 )
+from telegram.helpers import escape_markdown
 
-from corgos_telegram_bot.modules.reddit import Reddit
+from corgos_telegram_bot.modules.reddit import EmptyQueueError, Reddit
 from corgos_telegram_bot.modules.settings import Settings
+
+logger = logging.getLogger(__name__)
+
+Context = ContextTypes.DEFAULT_TYPE
 
 
 class Telegram:
     """This class contains all the logic for the Telegram bot."""
 
+    _application: Application
+    _jobqueue: JobQueue
     _bot_username: str
     _settings_path: str
     _settings: Settings
     _reddit: Reddit
+    _stop_event: asyncio.Event
+    _restart_requested: bool
 
     def __init__(self, settings_path: str = "settings.json") -> None:
         """Initialize the Telegram bot.
@@ -47,34 +57,41 @@ class Telegram:
         Args:
             settings_path (str): path to the settings file
         """
-        logging.info("Initializing Telegram bot")
+        logger.info("Initializing Telegram bot")
         self._settings_path = settings_path
         # create a Reddit handler
         self._reddit = Reddit(settings_path=settings_path)
-        logging.info("Telegram bot initialized")
+        # set when the bot is asked to stop (or restart)
+        self._stop_event = asyncio.Event()
+        self._restart_requested = False
+        logger.info("Telegram bot initialized")
 
     # Private methods
 
-    def _escapeMarkdown(self, text: str) -> str:
-        """Escape markdown characters in a text.
+    @staticmethod
+    def _getChatId(update: Update) -> int:
+        """Return the id of the chat an update comes from.
 
         Args:
-            text (str): text to escape
+            update (Update): incoming update
 
         Returns:
-            str: escaped text
+            int: id of the chat
+
+        Raises:
+            ValueError: if the update does not come from a chat
         """
-        to_escape = ["_", "*", "[", "]", "(", ")"]
-        for char in to_escape:
-            text = text.replace(char, f"\\{char}")
-        return text
+        if update.effective_chat is None:
+            error_msg = f"Update {update.update_id} has no chat"
+            raise ValueError(error_msg)
+        return update.effective_chat.id
 
     # Public methods
 
     async def start(self) -> None:
         """Start the bot."""
-        logging.info("Starting bot...")
-        logging.info("Loading settings...")
+        logger.info("Starting bot...")
+        logger.info("Loading settings...")
         self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
         await self._settings.validate(
@@ -92,10 +109,12 @@ class Telegram:
         )
 
         # on which days the corgos will be fetched. Must be converted to tuple
-        #   since JSON only supports arrays. 0 for monday through 6 for sunday
-        load_days = await self._settings.get("telegram_load_days", lambda x: tuple(x))
+        #   since JSON only supports arrays. 0 for sunday through 6 for saturday
+        load_days = await self._settings.get("telegram_load_days", tuple)
+        # minutes after midnight, UTC
         load_time = await self._settings.get(
-            "telegram_load_time", lambda x: time(minute=x % 60, hour=int(x / 60))
+            "telegram_load_time",
+            lambda x: time(hour=x // 60, minute=x % 60, tzinfo=UTC),
         )
         token = await self._settings.get("telegram_token")
 
@@ -112,85 +131,122 @@ class Telegram:
 
         # start the application
         await self._startApplication()
-        logging.info("Bot started")
+        logger.info("Bot started")
 
     async def stop(self) -> None:
         """Stop the bot."""
-        logging.info("Stopping bot...")
+        logger.info("Stopping bot...")
         await self._stopApplication()
         await self._reddit.stop()
         await self._settings.save()
-        logging.info("Bot stopped")
+        logger.info("Bot stopped")
 
-    async def _setupJobQueue(self, load_time: time, load_days: tuple[int]) -> None:
-        logging.info("Setting up job queue...")
+    def requestStop(self, *, restart: bool = False) -> None:
+        """Ask the bot to stop, letting the owner of the bot perform the shutdown.
+
+        Args:
+            restart (bool): whether the bot should be restarted after stopping.
+                Defaults to False.
+        """
+        logger.info("Stop requested (restart: %s)", restart)
+        self._restart_requested = self._restart_requested or restart
+        self._stop_event.set()
+
+    async def waitForStopRequest(self) -> None:
+        """Wait until the bot is asked to stop."""
+        await self._stop_event.wait()
+
+    @property
+    def restart_requested(self) -> bool:
+        """Whether the bot should be restarted after stopping."""
+        return self._restart_requested
+
+    async def _setupJobQueue(self, load_time: time, load_days: tuple[int, ...]) -> None:
+        logger.info("Setting up job queue...")
+        if self._application.job_queue is None:
+            error_msg = "Job queue not available, is the job-queue extra installed?"
+            raise RuntimeError(error_msg)
         self._jobqueue = self._application.job_queue
 
         # bot start notification
-        self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")  # type: ignore
+        self._jobqueue.run_once(self._botStarted, when=0, name="bot_started")
         # load posts for the first time
-        self._jobqueue.run_once(  # type: ignore
-            self._loadPosts,  # type: ignore
-            when=0,
-            name="load_posts",
-            job_kwargs={"misfire_grace_time": 60},
-        )
-        # preload the username for faster access
-        self._jobqueue.run_once(  # type: ignore
-            self._preloadUsername,  # type: ignore
-            when=0,
-            name="preload_username",
-            job_kwargs={"misfire_grace_time": 60},
-        )
+        self._scheduleLoadPosts()
 
         # load fresh corgos on set days
-        self._jobqueue.run_daily(  # type: ignore
-            self._loadPosts,  # type: ignore
+        self._jobqueue.run_daily(
+            self._loadPosts,
             days=load_days,
             time=load_time,
             name="load_posts",
         )
-        logging.info("Job queue set up.")
+        logger.info("Job queue set up.")
+
+    def _scheduleLoadPosts(self) -> None:
+        """Load the posts from Reddit as soon as possible, in the background."""
+        self._jobqueue.run_once(
+            self._loadPosts,
+            when=0,
+            name="load_posts",
+            job_kwargs={"misfire_grace_time": 60},
+        )
 
     async def _setupHandlers(self) -> None:
-        logging.info("Setting up handlers...")
+        logger.info("Setting up handlers...")
         # this handler will notify the admins and the user if something went
         #   wrong during the execution
-        self._application.add_error_handler(self._errorHandler)  # type: ignore
+        self._application.add_error_handler(self._errorHandler)
 
         # these are the handlers for all the commands
-        self._application.add_handler(CommandHandler("start", self._botStartCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("stop", self._botStopCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("reset", self._botResetCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("corgo", self._botCorgoCommand))  # type: ignore
-
-        self._application.add_handler(
-            CommandHandler("goldencorgo", self._botGoldencorgoCommand)  # type: ignore
-        )
-        self._application.add_handler(CommandHandler("check", self._botCheckCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("stats", self._botStatsCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("ping", self._botPingCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("ban", self._botBanCommand))  # type: ignore
-        self._application.add_handler(CommandHandler("unban", self._botUnbanCommand))  # type: ignore
+        commands = {
+            "start": self._botStartCommand,
+            "stop": self._botStopCommand,
+            "reset": self._botResetCommand,
+            "corgo": self._botCorgoCommand,
+            "goldencorgo": self._botGoldencorgoCommand,
+            "check": self._botCheckCommand,
+            "stats": self._botStatsCommand,
+            "ping": self._botPingCommand,
+            "ban": self._botBanCommand,
+            "unban": self._botUnbanCommand,
+        }
+        for command, callback in commands.items():
+            self._application.add_handler(CommandHandler(command, callback))
 
         # catches every message and replies with some gibberish
         self._application.add_handler(
-            MessageHandler(  # type: ignore
+            MessageHandler(
                 filters.TEXT & (~filters.COMMAND),
-                self._botTextMessageReceived,  # type: ignore
+                self._botTextMessageReceived,
             )
         )
-        logging.info("Handlers set up.")
+        logger.info("Handlers set up.")
 
     async def _startApplication(self) -> None:
-        """Start the application."""
+        """Start the application.
+
+        Raises:
+            RuntimeError: if the application has no updater
+        """
         await self._application.initialize()
-        await self._application.updater.start_polling()  # type: ignore
+        # the bot info is fetched during the initialization
+        self._bot_username = f"@{self._application.bot.username}"
+        logger.info("Bot username is %s", self._bot_username)
+
+        if self._application.updater is None:
+            error_msg = "Updater not available"
+            raise RuntimeError(error_msg)
+        await self._application.updater.start_polling()
         await self._application.start()
 
     async def _stopApplication(self) -> None:
-        """Stop the application."""
-        await self._application.updater.stop()  # type: ignore
+        """Stop the application.
+
+        Stopping the updater also marks the updates that have already been
+        received as read, so they are not delivered again after a restart.
+        """
+        if self._application.updater is not None:
+            await self._application.updater.stop()
         await self._application.stop()
         await self._application.shutdown()
 
@@ -200,132 +256,142 @@ class Telegram:
         Returns:
             list[int]: list of admin chat ids
         """
-        admins = await self._settings.get("telegram_admins")
-        return admins
+        return await self._settings.get("telegram_admins")
+
+    async def _notifyAdmins(
+        self,
+        message: str,
+        parse_mode: str | None = constants.ParseMode.MARKDOWN,
+    ) -> None:
+        """Send a message to all the admins.
+
+        A failure to reach an admin (e.g. if they blocked the bot) is logged
+        and does not prevent the other admins from being notified.
+
+        Args:
+            message (str): text of the message
+            parse_mode (str | None): parse mode of the message.
+                Defaults to markdown.
+        """
+        for chat_id in await self._getAdmins():
+            try:
+                await self._application.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode=parse_mode,
+                )
+            except TelegramError as e:
+                logger.warning("Cannot notify admin %d: %s", chat_id, e)
 
     # Callbacks
 
-    async def _botStarted(self, context: ContextTypes) -> None:
+    async def _botStarted(self, _context: Context) -> None:
         """Send a message to admins when the bot starts.
 
         Callback fired at startup from JobQueue
         """
-        message = "*Bot started*"
-        admins = await self._getAdmins()
-        for chat_id in admins:
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
+        await self._notifyAdmins("*Bot started*")
 
-    async def _loadPosts(self, context: ContextTypes) -> None:
+    async def _loadPosts(self, _context: Context) -> None:
         """Load posts from Reddit.
 
         Callback fired at startup and at night in set days from JobQueue
         """
-        logging.info("Loading posts asynchronously.")
+        logger.info("Loading posts asynchronously.")
+        await self._notifyAdmins("_Posts are now being loaded..._")
 
-        message = "_Posts are now being loaded..._"
-        admins = await self._getAdmins()
-        for chat_id in admins:
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
-
-        logging.info("Downloading posts from Reddit.")
+        logger.info("Downloading posts from Reddit.")
         posts_num = await self._reddit.loadPostsAsync()
-        logging.info("Downloaded %d posts from Reddit.", posts_num)
+        logger.info("Downloaded %d posts from Reddit.", posts_num)
 
-        message = f"_{posts_num} posts have been loaded._"
-        for chat_id in admins:
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
-        logging.info("Posts loaded.")
+        await self._notifyAdmins(f"_{posts_num} posts have been loaded._")
+        logger.info("Posts loaded.")
 
-    async def _preloadUsername(self, _: ContextTypes) -> None:
-        # load the bot username
-        logging.info("Preloading bot username.")
-        me = await self._application.bot.get_me()
-        self._bot_username = "@" + me.username  # type: ignore
-        logging.info("Bot username is %s", self._bot_username)
-
-    async def _botStartCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _botStartCommand(self, update: Update, context: Context) -> None:
         """Greet the user when /start is called.
 
         Callback fired with command /start
         """
-        chat_id = update.effective_chat.id  # type: ignore
+        chat_id = self._getChatId(update)
         message = "_Press /corgo to get a corgo!_"
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-        logging.info("/start called")
+        logger.info("/start called")
 
-    async def _botStopCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _botStopCommand(self, update: Update, context: Context) -> None:
         """Completely stops the bot.
 
         Callback fired with command /stop
         Hidden command as it's not the in command list
         """
-        chat_id = update.effective_chat.id  # type: ignore
+        chat_id = self._getChatId(update)
 
         admins = await self._getAdmins()
         if chat_id in admins:
             message = "_Bot stopped_"
-            await context.bot.send_message(  # type: ignore
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
-            # save settings just in case
-            logging.warning("Stopped by chat id %d", chat_id)
-            await self._stopApplication()
-            sys.exit(0)
+            logger.warning("Stopped by chat id %d", chat_id)
+            # the bot cannot be stopped from inside a handler, as stopping
+            #   waits for all the handlers to finish
+            self.requestStop()
 
         else:
             message = "*This command is for moderators only*"
-            await context.bot.send_message(  # type: ignore
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-    async def _botResetCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _botResetCommand(self, update: Update, context: Context) -> None:
         """Reset the bot.
 
         Callback fired with command /reset
         Hidden command as it's not the in command list
         """
-        chat_id = update.effective_chat.id  # type: ignore
+        chat_id = self._getChatId(update)
         admins = await self._getAdmins()
         if chat_id in admins:
             message = "_Resetting..._"
-            await context.bot.send_message(  # type: ignore
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
 
-            logging.warning("Reset by chat id %d", chat_id)
-            # System command to reload the python script
-            os.execl(sys.executable, sys.executable, *sys.argv)
+            logger.warning("Reset by chat id %d", chat_id)
+            # the bot is stopped gracefully and then the script is reloaded
+            self.requestStop(restart=True)
 
-    async def _botCorgoCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _replyOutOfCorgos(self, chat_id: int, context: Context) -> None:
+        """Notify the user that there are no corgos and start loading them."""
+        message = "_The bot is currently out of corgos!_\n_Wait a bit and try again._"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
+
+        if not self._reddit.is_loading:
+            # if the bot is not already loading, we want to load posts
+            #   asynchronously
+            self._scheduleLoadPosts()
+
+    async def _botCorgoCommand(self, update: Update, context: Context) -> None:
         """Send a corgo to the user.
 
         Callback fired with command /corgo
         """
-        chat_id = update.effective_chat.id  # type: ignore
-        await context.bot.send_chat_action(  # type: ignore
+        chat_id = self._getChatId(update)
+        await context.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
         banned_chats = await self._settings.get("telegram_banned")
@@ -334,34 +400,18 @@ class Telegram:
                 "*You have been banned by the bot.*"
                 "\nThink about your past mistakes. \n\n_Hecc_."
             )
-            await context.bot.send_message(  # type: ignore
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
             return
 
-        if await self._reddit.isQueueEmpty():
+        try:
+            url = await self._reddit.getUrl()
+        except EmptyQueueError:
             # if the queue is empty, we want to notify the user
-            message = (
-                "_The bot is currently out of corgos!_\n_Wait a bit and try again._"
-            )
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
-
-            if not self._reddit.is_loading:
-                # if the bot is not already loading, we want to load posts
-                #   asynchronously
-                self._jobqueue.run_once(  # type: ignore
-                    self._loadPosts,  # type: ignore
-                    when=0,
-                    name="load_posts",
-                    job_kwargs={"misfire_grace_time": 60},
-                )
-
+            await self._replyOutOfCorgos(chat_id, context)
             return
 
         if randint(1, 1000) == 1:
@@ -374,8 +424,7 @@ class Telegram:
             message = "\n*GOLDEN CORGO FOUND!*"
         else:
             # otherwise we get a normal corgo
-            url = await self._reddit.getUrl()
-            message = self._escapeMarkdown(self._bot_username)
+            message = escape_markdown(self._bot_username)
 
         # increase the corgo counter
         await self._settings.apply(
@@ -384,7 +433,7 @@ class Telegram:
         )
 
         # send the corgo to the user
-        await context.bot.send_photo(  # type: ignore
+        await context.bot.send_photo(
             chat_id=chat_id,
             photo=url,
             caption=message,
@@ -393,23 +442,21 @@ class Telegram:
 
         # send another message to the user
         message = "_Press /corgo for another corgo!_"
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-        logging.info("Corgo sent")
+        logger.info("Corgo sent")
 
-    async def _botGoldencorgoCommand(
-        self, update: Update, context: ContextTypes
-    ) -> None:
+    async def _botGoldencorgoCommand(self, update: Update, context: Context) -> None:
         """Narrate the legend of the golden corgo to the user.
 
         Callback fired with command /goldencorgo
         """
-        chat_id = update.effective_chat.id  # type: ignore
-        await context.bot.send_chat_action(  # type: ignore
+        chat_id = self._getChatId(update)
+        await context.bot.send_chat_action(
             chat_id=chat_id,
             action=constants.ChatAction.TYPING,
         )
@@ -417,110 +464,102 @@ class Telegram:
         golden_corgos_found = await self._settings.get("telegram_golden_corgos_found")
 
         message = (
-            f"Some say that a _golden corgo_ is hiding inside Telegram... \n"
-            f"All we know is that if you are lucky enough, once in maybe "
-            f"1000 corgos you might find one. \n"
+            "Some say that a _golden corgo_ is hiding inside Telegram... \n"
+            "All we know is that if you are lucky enough, once in maybe "
+            "1000 corgos you might find one. \n"
             f"_So far, {golden_corgos_found} have been found "
-            f"roaming this bot..._"
+            "roaming this bot..._"
         )
 
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-        username = self._escapeMarkdown(self._bot_username)
+        username = escape_markdown(self._bot_username)
         message = (
             f"*Maybe you too will be blessed by this elusive good boi!*\n{username}"
         )
 
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-        logging.info("/goldencorgo called")
+        logger.info("/goldencorgo called")
 
-    async def _botCheckCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _botCheckCommand(self, update: Update, context: Context) -> None:
         """Check if the golden corgo picture is still available.
 
         Callback fired with command /check
         Hidden command as it's not the in command list
 
         Raises:
-            Exception: if the golden corgo picture is not found
+            TelegramError: if the golden corgo picture is not found
         """
-        chat_id = update.effective_chat.id  # type: ignore
+        chat_id = self._getChatId(update)
 
         admins = await self._getAdmins()
-        url = await self._settings.get("telegram_golden_corgo_url")
-        if chat_id in admins:
-            # we want to get the "small" image in order to make this
-            # whole process  slightly faster. imgur provides different
-            # image sizes by editing its url a bit
-            small_url = url.replace(".jpg", "s.jpg")
-
-            caption = self._bot_username
-
-            try:
-                m = await context.bot.send_photo(  # type: ignore
-                    chat_id=chat_id,
-                    photo=small_url,
-                    caption=caption,
-                )
-                to_delete = m["message_id"]
-
-                message = "*The golden corgo URL is still working!*"
-                await context.bot.send_message(  # type: ignore
-                    chat_id=chat_id,
-                    text=message,
-                    parse_mode=constants.ParseMode.MARKDOWN,
-                )
-
-            except Exception as e:
-                message = "*Golden Corgo picture not found!*\n"
-                await context.bot.send_message(  # type: ignore
-                    chat_id=chat_id,
-                    text=message,
-                    parse_mode=constants.ParseMode.MARKDOWN,
-                )
-                error_msg = (
-                    f"Error while sending checking golden corgo. Url {url} Error {e}"
-                )
-                logging.error(error_msg)
-                raise Exception(error_msg) from e
-
-            # we now delete the sent messages (if any) to keep the SECRET
-            if to_delete:
-                await context.bot.delete_message(chat_id, to_delete)  # type: ignore
-
-        else:
+        if chat_id not in admins:
             message = "*This command is for moderators only*"
-            await context.bot.send_message(  # type: ignore
+            await context.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
             )
+            return
 
-        logging.info("/check called")
+        url = await self._settings.get("telegram_golden_corgo_url")
+        # we want to get the "small" image in order to make this
+        # whole process  slightly faster. imgur provides different
+        # image sizes by editing its url a bit
+        small_url = url.replace(".jpg", "s.jpg")
 
-    async def _botStatsCommand(self, update: Update, context: ContextTypes) -> None:
+        try:
+            sent = await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=small_url,
+                caption=self._bot_username,
+            )
+        except TelegramError:
+            message = "*Golden Corgo picture not found!*\n"
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode=constants.ParseMode.MARKDOWN,
+            )
+            # the error handler will send the details to the admins
+            raise
+
+        message = "*The golden corgo URL is still working!*"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
+
+        # we now delete the sent picture to keep the SECRET
+        await context.bot.delete_message(chat_id, sent.message_id)
+
+        logger.info("/check called")
+
+    async def _botStatsCommand(self, update: Update, context: Context) -> None:
         """Return stats about the bot.
 
         Callback fired with command  /stats
         """
-        chat_id = update.effective_chat.id  # type: ignore
-        await context.bot.send_chat_action(  # type: ignore
+        chat_id = self._getChatId(update)
+        await context.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
 
-        # bot started date
+        # bot started date, stored in UTC
         d1 = await self._settings.get(
             "telegram_start_date",
-            lambda x: datetime.fromisoformat(x),
+            lambda x: datetime.fromisoformat(x).replace(tzinfo=UTC),
         )
         # today's date
-        d2 = datetime.now()
+        d2 = datetime.now(UTC)
         days_between = (d2 - d1).days + 1
         # Average number of corgos sent per day
         corgos_sent = await self._settings.get("telegram_corgos_sent")
@@ -536,43 +575,65 @@ class Telegram:
             f"*{golden_corgos_found}* golden corgos were found!"
         )
 
-        await context.bot.send_message(  # type: ignore
-            chat_id=update.effective_chat.id,  # type: ignore
+        await context.bot.send_message(
+            chat_id=chat_id,
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-        logging.info("/stats called")
+        logger.info("/stats called")
 
-    async def _botPingCommand(self, update: Update, context: ContextTypes) -> None:
+    async def _botPingCommand(self, update: Update, context: Context) -> None:
         """Reply "PONG" to the user.
 
         Callback fired with command /ping for debug purposes
         Hidden command as it's not the in command list
         """
         message = "🏓 *PONG* 🏓"
-        await context.bot.send_message(  # type: ignore
-            chat_id=update.effective_chat.id,  # type: ignore
+        await context.bot.send_message(
+            chat_id=self._getChatId(update),
             text=message,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-    async def _botBanCommand(self, update: Update, context: ContextTypes) -> None:
+    @staticmethod
+    async def _parseChatIds(chat_id: int, context: Context) -> set[int] | None:
+        """Parse the chat ids passed as arguments to a command.
+
+        If the arguments are not valid, the user is notified.
+
+        Args:
+            chat_id (int): id of the chat the command was sent from
+            context (Context): context of the command
+
+        Returns:
+            set[int] | None: the parsed chat ids, None if they are not valid
+        """
+        try:
+            return {int(arg) for arg in context.args or []}
+        except ValueError:
+            message = "*Chat ids must be numbers*"
+            await context.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
+            )
+            return None
+
+    async def _botBanCommand(self, update: Update, context: Context) -> None:
         """Ban a chat from the bot.
 
         Hidden command as it's not the in command list
         """
-        chat_id = update.effective_chat.id  # type: ignore
-        message = ""
+        chat_id = self._getChatId(update)
 
         admins = await self._getAdmins()
-        banned = await self._settings.get("telegram_banned")
         if chat_id in admins:
-            for arg in context.args:  # type: ignore
-                banned.append(int(arg))
+            to_ban = await self._parseChatIds(chat_id, context)
+            if to_ban is None:
+                return
 
-            await self._settings.set("telegram_banned", sorted(set(banned)))
-            banned_chats = await self._settings.get("telegram_banned")
+            banned_chats = await self._settings.apply(
+                "telegram_banned", lambda banned: sorted(set(banned) | to_ban)
+            )
             if len(banned_chats) > 0:
                 message = "_Ban list_: " + ", ".join(str(b) for b in banned_chats)
             else:
@@ -581,43 +642,38 @@ class Telegram:
         else:
             message = "*This command is for moderators only*"
 
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    async def _botUnbanCommand(self, update: Update, context: ContextTypes) -> None:
-        chat_id = update.effective_chat.id  # type: ignore
-        message = ""
+    async def _botUnbanCommand(self, update: Update, context: Context) -> None:
+        """Unban a chat from the bot.
+
+        Hidden command as it's not the in command list
+        """
+        chat_id = self._getChatId(update)
 
         admins = await self._getAdmins()
-        banned = await self._settings.get("telegram_banned")
         if chat_id in admins:
-            for arg in context.args:  # type: ignore
-                banned.remove(int(arg))
+            to_unban = await self._parseChatIds(chat_id, context)
+            if to_unban is None:
+                return
 
-            await self._settings.set("telegram_banned", sorted(set(banned)))
+            await self._settings.apply(
+                "telegram_banned", lambda banned: sorted(set(banned) - to_unban)
+            )
 
             message = "*Chats removed from ban list*: " + ", ".join(
-                str(a)
-                for a in context.args  # type: ignore
+                str(a) for a in sorted(to_unban)
             )
         else:
             message = "*This command is for moderators only*"
 
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id, text=message, parse_mode=constants.ParseMode.MARKDOWN
         )
 
-    # Function that sends random dog barks
-    # Callback fired whenever a text message is sent
-    # This is currently disabled in groups because it WILL lead to
-    #   excessive spam.
-    #  In order to enable it, the "group privacy" settings in @botfather
-    #  must be set to "False"
-
-    async def _botTextMessageReceived(
-        self, update: Update, context: ContextTypes
-    ) -> None:
+    async def _botTextMessageReceived(self, update: Update, context: Context) -> None:
         """Send a random dog bark when a text message is received.
 
         Callback fired whenever a text message is sent
@@ -625,17 +681,17 @@ class Telegram:
         spam. In order to enable it, the "group privacy" settings in
         @botfather must be set to "False"
         """
-        if not update.message:
+        if not update.message or not update.message.text:
             return
 
-        chat_id = update.effective_chat.id  # type: ignore
+        chat_id = self._getChatId(update)
         message_id = update.message.message_id
 
-        await context.bot.send_chat_action(  # type: ignore
+        await context.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.TYPING
         )
 
-        message_text = update.message.text.upper()  # type: ignore
+        message_text = update.message.text.upper()
         barks = ["ARF ", "WOFF ", "BORK ", "RUFF "]
         swearwords = ["HECK", "GOSH", "DARN", "SHOOT", "FRICK", "FLIP"]
         marks = ["!", "?", "!?", "?!"]
@@ -644,64 +700,37 @@ class Telegram:
         #   don't tolerate it here
         if any(s in message_text for s in swearwords):
             message = "_NO H*CKING BAD LANGUAGE HERE!_"
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                reply_to_message_id=message_id,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
-            return
-
         # if the message contains a "bark", we want to reply accordingly
-        for b in barks:
-            if b.strip() in message_text:
-                message = f"_{b.strip()}!_"
-                await context.bot.send_message(  # type: ignore
-                    chat_id=chat_id,
-                    text=message,
-                    reply_to_message_id=message_id,
-                    parse_mode=constants.ParseMode.MARKDOWN,
-                )
-                return
-
+        elif bark := next((b.strip() for b in barks if b.strip() in message_text), ""):
+            message = f"_{bark}!_"
         # if the message contains the word "corgo", we want to tell the user
         #   to use the correct command
-        if "CORGO" in message_text.upper():
+        elif "CORGO" in message_text:
             message = "_Press /corgo to get a corgo!_"
-            await context.bot.send_message(  # type: ignore
-                chat_id=chat_id,
-                text=message,
-                reply_to_message_id=message_id,
-                parse_mode=constants.ParseMode.MARKDOWN,
-            )
-            return
+        else:
+            # we want to generate some gibberish answer to every message
+            # the dog noise list was sourced on Wikipedia. Yes, Wikipedia.
+            bark = choice(barks)
+            bark *= randint(1, 2)  # get some repetition
+            bark = bark.rstrip()  # remove the last space (if any)
+            mark = choice(marks)
+            message = f"_{bark}{mark}_"
 
-        # we want to generate some gibberish answer to every message
-        # the dog noise list was sourced on Wikipedia. Yes, Wikipedia.
-        bark = choice(barks)
-        bark *= randint(1, 2)  # get some repetition
-        bark = bark.rstrip()  # remove the last space (if any)
-        mark = choice(marks)
-        message = f"_{bark}{mark}_"
-        await context.bot.send_message(  # type: ignore
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             reply_to_message_id=message_id,
             parse_mode=constants.ParseMode.MARKDOWN,
         )
 
-    async def _errorHandler(self, update: Update, context: ContextTypes) -> None:
+    async def _errorHandler(self, update: object, context: Context) -> None:
         """Send a message to admins whenever an error is raised."""
-        error_string = str(context.error)  # type: ignore
+        error_string = str(context.error)
         update_string = str(update)
-        time_string = datetime.now().isoformat(sep=" ")
+        time_string = datetime.now(UTC).isoformat(sep=" ")
 
-        tb_list = traceback.format_exception(
-            None,
-            context.error,  # type: ignore
-            context.error.__traceback__,  # type: ignore
-        )
-        tb_string = " ".join(tb_list)
+        tb_list = traceback.format_exception(context.error)
+        tb_string = "".join(tb_list)
 
         messages = [
             f"Error at time: {time_string}\n",
@@ -710,14 +739,14 @@ class Telegram:
             f"Traceback:\n{tb_string}",
         ]
 
-        admins = await self._getAdmins()
-        for chat_id in admins:
-            for message in messages:
-                await self._application.bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+        # telegram messages have a maximum length, longer ones must be split
+        max_length = constants.MessageLimit.MAX_TEXT_LENGTH
+        for message in messages:
+            for start in range(0, len(message), max_length):
+                await self._notifyAdmins(
+                    message[start : start + max_length], parse_mode=None
                 )
 
         # log to file
-        logging.error("Update %s caused error %s.", update_string, error_string)
-        logging.error("Traceback:\n%s", tb_string)
+        logger.error("Update %s caused error %s.", update_string, error_string)
+        logger.error("Traceback:\n%s", tb_string)
