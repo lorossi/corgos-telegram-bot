@@ -4,3 +4,5 @@ services:
       context: .
     restart: unless-stopped
     container_name: corgos-telegram-bot
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,20 @@
+# settings and secrets are mounted at runtime, never baked into the image
+settings.json
+data/
+*.log
+
+# local environments and caches
+.venv
+__pycache__
+*.egg-info
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov/
+cov-html/
+
+# repository and editor files
+.git
+.github
+.vscode
