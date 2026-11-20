@@ -2,6 +2,8 @@ name: Test and Lint
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -14,14 +16,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker compose build --build-arg INSTALL_EXTRAS="dev,test"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
 
       - name: Run ruff linter
-        run: docker compose run corgos-telegram-bot ruff check corgos_telegram_bot tests
+        run: uv run ruff check
 
-      - name: Run mypy type checks
-        run: docker compose run corgos-telegram-bot mypy corgos_telegram_bot tests
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      - name: Run ty type checks
+        run: uv run ty check
 
       - name: Run pytest
-        run: docker compose run corgos-telegram-bot pytest
+        run: uv run pytest --cov
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker compose build
