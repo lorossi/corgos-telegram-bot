@@ -1,9 +1,12 @@
 """File containing the reddit interface to steal the images from reddit."""
 
 import asyncio
+import html
 import logging
-from asyncio import Queue
+from asyncio import Queue, QueueEmpty
+from http import HTTPStatus
 from random import shuffle
+from typing import Any
 
 import aiohttp
 import asyncpraw
@@ -11,8 +14,10 @@ from asyncpraw.models import Submission
 
 from corgos_telegram_bot.modules.settings import Settings
 
+logger = logging.getLogger(__name__)
 
-class EmptyQueueException(Exception):
+
+class EmptyQueueError(Exception):
     """Exception raised when the queue is empty."""
 
 
@@ -25,16 +30,18 @@ class Reddit:
     _temp_queue_lock: asyncio.Lock
     _praw_requests_semaphore: asyncio.Semaphore
     _http_requests_semaphore: asyncio.Semaphore
+    _http_session: aiohttp.ClientSession
     _reddit: asyncpraw.Reddit
     _is_loading: bool
 
     _settings: Settings
     _settings_path: str
     _image_formats: tuple[str, ...] = ("image/png", "image/jpeg", "image/jpg")
+    _http_timeout: aiohttp.ClientTimeout = aiohttp.ClientTimeout(total=15)
 
     def __init__(self, settings_path: str = "settings.json") -> None:
         """Initialize the Reddit interface."""
-        logging.info("Initializing Reddit interface")
+        logger.info("Initializing Reddit interface")
         self._settings_path = settings_path
         # create the queues
         self._queue = Queue()
@@ -44,68 +51,78 @@ class Reddit:
         self._temp_queue_lock = asyncio.Lock()
         # Initialize loading state
         self._is_loading = False
-        logging.info("Reddit interface initialized")
+        logger.info("Reddit interface initialized")
 
     # Private methods
 
-    async def _asyncRequest(self, url: str) -> aiohttp.ClientResponse:
-        """Make an async request to the specified url.
+    async def _requestContentType(self, url: str) -> str | None:
+        """Request the content type of the specified url.
+
+        A HEAD request is tried first so the image itself is not downloaded;
+        servers that do not support it are queried with a GET request.
 
         Args:
             url (str): url to be requested
 
         Returns:
-            Response: response of the request
+            str | None: content type of the url, None if the request failed
         """
         async with self._http_requests_semaphore:
-            logging.debug("Requesting url %s", url)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    logging.debug("Request to url %s completed", url)
-                    return response
+            logger.debug("Requesting url %s", url)
+            async with self._http_session.head(url, allow_redirects=True) as response:
+                status = response.status
+                content_type = response.headers.get("content-type")
 
-    async def _scrapeGallery(self, media_metadata: dict) -> list[str]:
+            if status == HTTPStatus.METHOD_NOT_ALLOWED:
+                logger.debug("HEAD not allowed for url %s, using GET", url)
+                async with self._http_session.get(url) as response:
+                    status = response.status
+                    content_type = response.headers.get("content-type")
+
+        logger.debug("Request to url %s completed with status %d", url, status)
+        if status >= HTTPStatus.BAD_REQUEST or content_type is None:
+            return None
+        return content_type.split(";")[0].strip().lower()
+
+    def _scrapeGallery(self, media_metadata: dict[str, Any]) -> list[str]:
         """Scrape a gallery of images.
 
         Args:
-            media_metadata (dict): media metadata of the gallery
+            media_metadata (dict[str, Any]): media metadata of the gallery
 
         Returns:
             list[str]: list of image urls
         """
-        logging.debug("Scraping gallery")
+        logger.debug("Scraping gallery")
         urls = []
-        for media in media_metadata.items():
-            if len(media) < 2:
-                logging.debug("Media metadata is not valid, skipping")
+        for media in media_metadata.values():
+            if not isinstance(media, dict):
+                logger.debug("Media metadata is not valid, skipping")
                 continue
 
-            image_format = media[1].get("m", None)
-            if image_format is None:
-                logging.debug("Url is not an image, skipping")
+            image_format = media.get("m")
+            if image_format not in self._image_formats:
+                logger.debug("Gallery item is not an image, skipping")
                 continue
 
-            if image_format in self._image_formats:
-                logging.debug("Url is an image, adding to queue")
+            image_obj = media.get("s")
+            if not isinstance(image_obj, dict):
+                logger.debug("Gallery does not contain this image, skipping")
                 continue
 
-            image_obj = media[1].get("s", None)
-            if image_obj is None:
-                logging.debug("Url gallery does not contain this image, skipping")
-                continue
-
-            image_url = media[1]["s"].get("u", None)
+            image_url = image_obj.get("u")
             if image_url is None:
-                logging.debug("Url is not an image, skipping")
+                logger.debug("Gallery item has no url, skipping")
                 continue
 
-            urls.append(image_url)
+            # reddit escapes the urls in the gallery metadata (& -> &amp;)
+            urls.append(html.unescape(image_url))
 
-        logging.debug("Found %d images in gallery", len(urls))
+        logger.debug("Found %d images in gallery", len(urls))
         return urls
 
     async def _scrapeImage(self, url: str) -> str | None:
-        """Load a single image, check if it's valid and add it to the queue.
+        """Load a single image and check if it's valid.
 
         Args:
             url (str): url of the image
@@ -113,19 +130,19 @@ class Reddit:
         Returns:
             str | None: url of the image if valid, None otherwise
         """
-        logging.debug("Checking url %s", url)
+        logger.debug("Checking url %s", url)
         try:
-            r = await self._asyncRequest(url)
-            image_format = r.headers["content-type"]
-            if image_format in self._image_formats:
-                logging.debug("Url is an image, adding to queue")
-                return url
-            else:
-                logging.debug("Url is not an image, skipping. Format: %s", image_format)
-                return None
-        except Exception as e:
-            logging.error("Cannot open url %s, error %s", url, e)
+            image_format = await self._requestContentType(url)
+        except (aiohttp.ClientError, TimeoutError) as e:
+            logger.warning("Cannot open url %s, error %s", url, e)
             return None
+
+        if image_format in self._image_formats:
+            logger.debug("Url is an image, adding to queue")
+            return url
+
+        logger.debug("Url is not an image, skipping. Format: %s", image_format)
+        return None
 
     async def _scrapePost(
         self,
@@ -142,79 +159,76 @@ class Reddit:
             bool: True if the post is valid, False otherwise
         """
         async with self._praw_requests_semaphore:
-            logging.debug("Loading post with url %s", submission.url)  # type: ignore
+            logger.debug("Loading post with url %s", submission.url)
             # skip stickied posts
-            if submission.stickied:  # type: ignore
-                logging.debug("Skipping post %s due to stickied", submission.url)  # type: ignore
+            if submission.stickied:
+                logger.debug("Skipping post %s due to stickied", submission.url)
                 return False
             # skip selftext posts
-            if submission.is_self:  # type: ignore
-                logging.debug("Skipping post %s due to selftext", submission.url)  # type: ignore
+            if submission.is_self:
+                logger.debug("Skipping post %s due to selftext", submission.url)
                 return False
 
             # skip posts that have a low score
-            if submission.score < min_score:  # type: ignore
-                logging.warning(
-                    "Skipping post %s due to low score (%d < %d)",  # type: ignore
-                    submission.url,  # type: ignore
-                    submission.score,  # type: ignore
-                    min_score,  # type: ignore
+            if submission.score < min_score:
+                logger.debug(
+                    "Skipping post %s due to low score (%d < %d)",
+                    submission.url,
+                    submission.score,
+                    min_score,
                 )
                 return False
 
-            # filter gifs
-            if "v.redd.it" in submission.url:  # type: ignore
-                logging.warning("Skipping post %s because is gif", submission.url)  # type: ignore
+            # filter videos
+            if "v.redd.it" in submission.url:
+                logger.debug("Skipping post %s because is video", submission.url)
                 return False
 
-            logging.debug("Post passed all checks, loading")
-            await submission.load()  # type: ignore
+            logger.debug("Post passed all checks, loading")
+            await submission.load()
 
             # try to open the image
-            if hasattr(submission, "is_gallery"):
-                logging.debug("Post is a gallery, scraping")
-                urls = await self._scrapeGallery(submission.media_metadata)  # type: ignore
+            if getattr(submission, "is_gallery", False):
+                logger.debug("Post is a gallery, scraping")
+                urls = self._scrapeGallery(getattr(submission, "media_metadata", {}))
             else:
-                logging.debug("Post is not a gallery, scraping")
-                new_url = await self._scrapeImage(submission.url)  # type: ignore
+                logger.debug("Post is not a gallery, scraping")
+                new_url = await self._scrapeImage(submission.url)
                 if new_url is None:
-                    logging.debug("Url is not an image, skipping")
+                    logger.debug("Url is not an image, skipping")
                     return False
 
                 urls = [new_url]
 
-            # check the url for each image
-            for url in urls:
-                # if it's a valid image, we add it to the queue
-                logging.debug("Adding %s to list", url)
-                async with self._temp_queue_lock:
-                    self._temp_queue.add(url)
-                logging.info("Added %s to list", url)
+            # add each valid image to the queue
+            async with self._temp_queue_lock:
+                self._temp_queue.update(urls)
+            logger.debug("Added %d urls to list", len(urls))
 
-            return True
+            return len(urls) > 0
 
     async def _openReddit(self) -> None:
         """Log in to Reddit using asyncpraw."""
-        logging.info("Logging into Reddit")
+        logger.info("Logging into Reddit")
         self._reddit = asyncpraw.Reddit(
             client_id=await self._settings.get("reddit_client_id"),
             client_secret=await self._settings.get("reddit_client_secret"),
             user_agent=await self._settings.get("reddit_user_agent"),
         )
-        logging.info("Logged into Reddit")
+        logger.info("Logged into Reddit")
 
     async def _closeReddit(self) -> None:
         """Log out from Reddit."""
-        logging.info("Logging out from Reddit")
+        logger.info("Logging out from Reddit")
         await self._reddit.close()
-        logging.info("Logged out from Reddit")
+        logger.info("Logged out from Reddit")
 
     # Public methods
     async def start(self) -> None:
         """Start the Reddit interface."""
-        logging.info("Starting Reddit interface")
+        logger.info("Starting Reddit interface")
         # load settings
-        logging.debug("Loading settings")
+        logger.debug("Loading settings")
         self._settings = Settings(settings_path=self._settings_path)
         await self._settings.load()
         # validate settings
@@ -230,7 +244,7 @@ class Reddit:
                 "reddit_http_concurrent_requests",
             ]
         )
-        logging.debug("Settings loaded and validated")
+        logger.debug("Settings loaded and validated")
 
         # create a semaphore for the reddit requests
         self._praw_requests_semaphore = asyncio.Semaphore(
@@ -240,16 +254,19 @@ class Reddit:
         self._http_requests_semaphore = asyncio.Semaphore(
             await self._settings.get("reddit_http_concurrent_requests")
         )
+        # create a single http session, shared by all the requests
+        self._http_session = aiohttp.ClientSession(timeout=self._http_timeout)
 
         await self._openReddit()
 
-        logging.debug("Reddit interface started")
+        logger.debug("Reddit interface started")
 
     async def stop(self) -> None:
         """Stop the Reddit interface."""
-        logging.info("Stopping Reddit interface")
+        logger.info("Stopping Reddit interface")
         await self._closeReddit()
-        logging.info("Reddit interface stopped")
+        await self._http_session.close()
+        logger.info("Reddit interface stopped")
 
     async def loadPostsAsync(self) -> int:
         """Load all image posts from the needed subreddit.
@@ -259,81 +276,87 @@ class Reddit:
         Returns:
             int: number of posts loaded
         """
-        logging.info("Loading posts from Reddit")
+        logger.info("Loading posts from Reddit")
         # empty the queue
         async with self._temp_queue_lock:
             self._temp_queue = set()
             self._is_loading = True
 
+        try:
+            await self._loadPostsInTempQueue()
+
+            # shuffle the queue and empty the temporary queue
+            async with self._queue_lock, self._temp_queue_lock:
+                shuffled_queue = list(self._temp_queue)
+                shuffle(shuffled_queue)
+
+                self._queue = Queue(len(shuffled_queue))
+                for url in shuffled_queue:
+                    self._queue.put_nowait(url)
+        finally:
+            self._is_loading = False
+
+        # return the number of posts loaded
+        logger.info("Loaded %d posts from Reddit", len(shuffled_queue))
+        return len(shuffled_queue)
+
+    async def _loadPostsInTempQueue(self) -> None:
+        """Scrape the top posts of the week and put them in the temporary queue."""
         # load settings
         subreddits_list = await self._settings.get("reddit_subreddits")
-        subreddits = await self._reddit.subreddit("+".join(subreddits_list))  # type: ignore
+        subreddits = await self._reddit.subreddit("+".join(subreddits_list))
         posts_limit = await self._settings.get("reddit_posts_limit")
         min_score = await self._settings.get("reddit_min_score")
         # create a list of tasks to be executed
-        logging.debug("Creating %d tasks", posts_limit)
-        tasks = {
+        logger.debug("Creating %d tasks", posts_limit)
+        tasks = [
             self._scrapePost(submission, min_score=min_score)
             async for submission in subreddits.top(
                 time_filter="week",
                 limit=posts_limit,
             )
-        }
-        logging.debug("Executing tasks")
-        # execute all the tasks and wait for them to finish
-        await asyncio.gather(*tasks)
-
-        # shuffle the queue and empty the temporary queue
-        await self._queue_lock.acquire()
-        await self._temp_queue_lock.acquire()
-
-        shuffled_queue = list(self._temp_queue)
-        shuffle(shuffled_queue)
-
-        self._queue = Queue(len(self._temp_queue))
-        for url in shuffled_queue:
-            await self._queue.put(url)
-
-        self._is_loading = False
-
-        self._temp_queue_lock.release()
-        self._queue_lock.release()
-
-        # return the number of posts loaded
-        logging.info("Loaded about %d posts from Reddit", self._queue.qsize())
-        return len(shuffled_queue)
+        ]
+        logger.debug("Executing tasks")
+        # execute all the tasks and wait for them to finish. A single failing
+        #   post must not stop the others from being loaded
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("Error while scraping post: %r", result)
 
     async def getUrl(self) -> str:
         """Return the url of the next image in the queue.
 
-        Raises:
-            EmptyQueueException: if the queue is empty
         Returns:
             str: url of the next image
-        """
-        logging.info("Getting next image from queue")
-        queue_empty = await self.isQueueEmpty()
-        if queue_empty:
-            error_msg = "Queue is empty"
-            logging.error(error_msg)
-            raise EmptyQueueException(error_msg)
 
+        Raises:
+            EmptyQueueError: if the queue is empty
+        """
+        logger.info("Getting next image from queue")
         async with self._queue_lock:
-            url = await self._queue.get()
-            await self._queue.put(url)
-        logging.info("Next image is %s", url)
+            try:
+                url = self._queue.get_nowait()
+            except QueueEmpty as e:
+                error_msg = "Queue is empty"
+                logger.warning(error_msg)
+                raise EmptyQueueError(error_msg) from e
+            # rotate the queue
+            self._queue.put_nowait(url)
+
+        logger.info("Next image is %s", url)
         return url
 
     async def isQueueEmpty(self) -> bool:
         """Return True if the queue is empty, False otherwise."""
-        logging.debug("Checking if queue is empty")
+        logger.debug("Checking if queue is empty")
         async with self._queue_lock:
             empty = self._queue.empty()
 
-        logging.debug("Queue is empty: %s", empty)
+        logger.debug("Queue is empty: %s", empty)
         return empty
 
     @property
     def is_loading(self) -> bool:
-        """Return True if the queue is being loaded, False otherwise."""
+        """Whether the queue is being loaded."""
         return self._is_loading
