@@ -1,55 +1,94 @@
 [build-system]
-requires = ["setuptools >= 80.9.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
 
 
 [project]
 name = "corgos-telegram-bot"
-version = "1.0.0"
+version = "1.1.0"
 description = "A fully functional Telegram image bot where all the photos are stolen from Reddit."
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 readme = "README.md"
 dependencies = [
+  "aiofiles==25.1.0",
+  "aiohttp==3.13.3",
   "asyncpraw==7.8.1",
   "python-telegram-bot[job-queue]==22.5.0",
   "ujson==5.11.0",
-  "aiohttp==3.13.3",
 ]
+
+[project.scripts]
+corgos-telegram-bot = "corgos_telegram_bot.main:run"
 
 [project.urls]
 "Homepage" = "https://github.com/lorossi/corgos-telegram-bot"
 "Repository" = "https://github.com/lorossi/corgos-telegram-bot"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-  "ruff==0.14.10",
-  "mypy==1.19.1",
+  "ruff==0.17.2",
+  "ty==0.0.92",
   "types-aiofiles==25.1.0.20251011",
-  "asyncpraw_stubs==0.0.3",
+  { include-group = "test" },
 ]
-test = ["pytest", "pytest-cov", "pytest-asyncio"]
+test = ["pytest==9.0.2", "pytest-asyncio==1.3.0", "pytest-cov==7.0.0"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.build-backend]
+module-root = ""
 
 [tool.ruff]
 line-length = 88
+target-version = "py313"
 
 [tool.ruff.lint]
-preview = true                                   # needed for "DOC" rules
-exclude = ["venv", "__pycache__", "__init__.py"]
-select = ["D", "E", "W", "F", "ANN", "DOC"]
-ignore = ["ANN401"]                              # ignore "Any" type
-unfixable = ["F401"]                             # do not fix unused imports
+preview = true # needed for "DOC" rules
+select = ["ALL"]
+ignore = [
+  "ANN401",  # allow "Any" type
+  "COM812",  # conflicts with the formatter
+  "CPY001",  # no copyright header in every file
+  "N802",    # the project uses camelCase method names
+  "S311",    # random is not used for cryptography
+  "PLR0913", # PTB callbacks and helpers need several arguments
+  "PLR0917",
+  "RUF201",  # rule codes are kept in the selectors
+]
+unfixable = ["F401"] # do not fix unused imports
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "PT009",   # tests are written with unittest
+  "PT027",
+  "PLR2004", # magic values are fine in tests
+  "PLC2701", # tests access private members
+  "SLF001",
+  "PLR0904", # test cases have many test methods
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.ty.rules]
+possibly-missing-attribute = "error"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+redundant-cast = "error"
+unused-ignore-comment = "error"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
-[tool.pylance]
-typeCheckingMode = "basic"
-
 [tool.coverage.run]
 branch = true
 source = ["corgos_telegram_bot"]
-omit = ["tests/**", "**/__init__.py", "main.py"]
+omit = ["tests/**", "**/__init__.py", "**/main.py"]
